@@ -13,11 +13,11 @@ const BANK_SENDERS = {
   BNZ:      ['BNZ_Broker@broker.bnz.co.nz'],
   ASB:      ['thirdpartydistribution@asb.co.nz'],
   Westpac:  ['Third_Party_NoReply@westpac.co.nz'],
-  ANZ:      [],
+  ANZ:      ['info@message.anz.co.nz','anztheinsider@anz.com'],
   Kiwibank: ['AdviserComms@kiwibank.co.nz'],
   CoOp:     ['TheCo-operativeBank@email.co-operativebank.co.nz'],
   SBS:      ['comms@e.sbsbank.co.nz'],
-  TSB:      []
+  TSB:      ['theteam@mail.tsb.co.nz']
 };
 
 const BANK_FULL_NAMES = {
