@@ -167,6 +167,32 @@ const DEFAULT_RATES = {
 };
 
 // ============================================================
+// SHEET ACCESSOR
+// ============================================================
+// Resolves the Rate Desk spreadsheet from a script property first
+// (RATE_DESK_SHEET_ID), falling back to the active spreadsheet for
+// container-bound contexts. Time-driven triggers in Apps Script may
+// have no active spreadsheet, so the property path is the reliable
+// route for the daily Gmail scan.
+function _rateDeskSheet_() {
+  var id = PropertiesService.getScriptProperties().getProperty('RATE_DESK_SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  throw new Error('Rate Desk sheet not configured. Run captureSheetId() from the editor once, or set RATE_DESK_SHEET_ID in Project Settings → Script Properties.');
+}
+
+// One-off helper. Run from the editor while you have the Rate Desk
+// spreadsheet bound (or active in your tab) to capture its ID into
+// Script Properties so triggers can find it later.
+function captureSheetId() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('No active spreadsheet — open this script from inside the Rate Desk spreadsheet via Extensions → Apps Script, then run captureSheetId again.');
+  PropertiesService.getScriptProperties().setProperty('RATE_DESK_SHEET_ID', ss.getId());
+  return 'Saved RATE_DESK_SHEET_ID = ' + ss.getId();
+}
+
+// ============================================================
 // WEB APP ENTRY POINT
 // ============================================================
 function doGet() {
@@ -182,7 +208,7 @@ function doGet() {
 // ============================================================
 function getAllRates() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _rateDeskSheet_();
     const result = {};
     BANK_IDS.forEach(function(bankId) {
       const sheet = ss.getSheetByName(bankId);
@@ -230,7 +256,7 @@ function updateBankRates(bankId, rateDataJson) {
     d.lastUpdated = formatDateValue(d.lastUpdated) || d.lastUpdated;
     if (d.fixedRates) d.fixedRates = d.fixedRates.map(function(r){return Object.assign({},r,{term:normalizeTerm(r.term)});});
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _rateDeskSheet_();
     let sheet = ss.getSheetByName(bankId);
 
     // Snapshot current FIXED rows as PREV_FIXED before overwriting.
@@ -310,7 +336,7 @@ function _appendRateHistory_(ss, bankId, d) {
 // if already populated for a bank.
 function backfillRateHistory() {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = _rateDeskSheet_();
     var sheet = ss.getSheetByName('RateCardHistory');
     if (!sheet) {
       sheet = ss.insertSheet('RateCardHistory');
@@ -371,7 +397,7 @@ function backfillRateHistory() {
 function getRateHistory(bankId, limit) {
   try {
     var lim = parseInt(limit) || 12;
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = _rateDeskSheet_();
     var sheet = ss.getSheetByName('RateCardHistory');
     if (!sheet || sheet.getLastRow() < 2) return JSON.stringify({success:true, snapshots:[]});
     var data = sheet.getRange(2,1,sheet.getLastRow()-1,7).getValues();
@@ -440,6 +466,12 @@ function extractRatesFromFile(base64Data, mimeType, bankHint) {
       responseText = callGemini(prompt + '\n\nContent:\n' + text, null, null);
     }
     const cleaned = responseText.replace(/```json|```/g,'').trim();
+    // Gemini sometimes returns prose ('I am sorry...') when an email
+    // isn't actually a rate card. Detect non-JSON before parsing so the
+    // caller gets a clean failure instead of an Unexpected-token crash.
+    if (!cleaned || (cleaned[0] !== '{' && cleaned[0] !== '[')) {
+      return JSON.stringify({success:false, error:'Not a rate card · ' + cleaned.substring(0,80)});
+    }
     return JSON.stringify({success:true, data:JSON.parse(cleaned)});
   } catch (e) {
     Logger.log('extractRatesFromFile error: ' + e.message);
@@ -843,7 +875,7 @@ function _calcPaymentRaw_(principal, annualRate, termYears, freq) {
 // ============================================================
 function getNegotiatedRates() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _rateDeskSheet_();
     const sheet = ss.getSheetByName('NegotiatedRates');
     if (!sheet) return JSON.stringify([]);
     const data = sheet.getDataRange().getValues();
@@ -869,7 +901,7 @@ function getNegotiatedRates() {
 function addNegotiatedRate(entryJson) {
   try {
     const entry = JSON.parse(entryJson);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _rateDeskSheet_();
     let sheet = ss.getSheetByName('NegotiatedRates');
     if (!sheet) {
       sheet = ss.insertSheet('NegotiatedRates');
@@ -890,7 +922,7 @@ function addNegotiatedRate(entryJson) {
 
 function updateNegotiatedRateStatus(id, status) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _rateDeskSheet_();
     const sheet = ss.getSheetByName('NegotiatedRates');
     if (!sheet) return JSON.stringify({success: false, error: 'No log sheet found'});
     const data = sheet.getDataRange().getValues();
@@ -928,5 +960,5 @@ function callGemini(textPrompt, base64Data, mimeType) {
   return result.candidates[0].content.parts[0].text;
 }
   function _showRateDeskParentId() {                                                                                                                                                                                                                                           
-    Logger.log('Rate Desk sheet ID: ' + SpreadsheetApp.getActiveSpreadsheet().getId());                                                                                                                                                                                        
+    Logger.log('Rate Desk sheet ID: ' + _rateDeskSheet_().getId());                                                                                                                                                                                        
   }  
