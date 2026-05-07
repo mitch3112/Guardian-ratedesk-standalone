@@ -5,15 +5,19 @@
 
 const BANK_IDS = ['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB'];
 
+// One bank can have multiple sending addresses — list them as an array.
+// scanGmailForRates builds a Gmail `from:(a OR b)` query so the most
+// recent matching email across any address wins. Empty array = skip
+// that bank in the scan (advisers drop the rate card manually).
 const BANK_SENDERS = {
-  BNZ:      'BNZ_Broker@broker.bnz.co.nz',
-  ASB:      'thirdpartydistribution@asb.co.nz',
-  Westpac:  'Third_Party_NoReply@westpac.co.nz',
-  ANZ:      '',
-  Kiwibank: 'AdviserComms@kiwibank.co.nz',
-  CoOp:     'TheCo-operativeBank@email.co-operativebank.co.nz',
-  SBS:      'comms@e.sbsbank.co.nz',
-  TSB:      ''
+  BNZ:      ['BNZ_Broker@broker.bnz.co.nz'],
+  ASB:      ['thirdpartydistribution@asb.co.nz'],
+  Westpac:  ['Third_Party_NoReply@westpac.co.nz'],
+  ANZ:      [],
+  Kiwibank: ['AdviserComms@kiwibank.co.nz'],
+  CoOp:     ['TheCo-operativeBank@email.co-operativebank.co.nz'],
+  SBS:      ['comms@e.sbsbank.co.nz'],
+  TSB:      []
 };
 
 const BANK_FULL_NAMES = {
@@ -597,10 +601,15 @@ function scanGmailForRates() {
   const updated = [];
 
   BANK_IDS.forEach(function(bankId) {
-    const sender = BANK_SENDERS[bankId];
-    if (!sender) return;
+    var senders = BANK_SENDERS[bankId];
+    // Tolerate the legacy single-string format alongside the array form.
+    if (typeof senders === 'string') senders = senders ? [senders] : [];
+    if (!senders || !senders.length) return;
+    var fromClause = senders.length === 1
+      ? 'from:' + senders[0]
+      : 'from:(' + senders.join(' OR ') + ')';
     try {
-      const threads = GmailApp.search('from:'+sender+' after:'+cutoffSec, 0, 3);
+      const threads = GmailApp.search(fromClause + ' after:' + cutoffSec, 0, 3);
       if (!threads.length) return;
       const msg = threads[0].getMessages().pop();
       let extracted = null;
