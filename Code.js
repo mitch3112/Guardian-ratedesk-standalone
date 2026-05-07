@@ -188,8 +188,12 @@ function _rateDeskSheet_() {
 function captureSheetId() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('No active spreadsheet — open this script from inside the Rate Desk spreadsheet via Extensions → Apps Script, then run captureSheetId again.');
-  PropertiesService.getScriptProperties().setProperty('RATE_DESK_SHEET_ID', ss.getId());
-  return 'Saved RATE_DESK_SHEET_ID = ' + ss.getId();
+  var id = ss.getId();
+  PropertiesService.getScriptProperties().setProperty('RATE_DESK_SHEET_ID', id);
+  // Logger output is what shows up in the execution log; the return
+  // value does not. Log explicitly so the user can confirm the save.
+  Logger.log('Saved RATE_DESK_SHEET_ID = ' + id + '  (sheet name: ' + ss.getName() + ')');
+  return 'Saved RATE_DESK_SHEET_ID = ' + id;
 }
 
 // ============================================================
