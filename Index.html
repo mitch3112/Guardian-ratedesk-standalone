@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Desk - Guardian Smith</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F2EC;--surface:#FFF;--border:#E8E1D5;--border-strong:#D4C9B8;
+  --text:#0F172A;--muted:#64748B;--hint:#94A3B8;
+  --accent:#B8841A;--accent-bg:#FDF5E4;
+  --success:#059669;--success-bg:#F0FDF4;--success-bd:#A7F3D0;
+  --warning:#B45309;--warning-bg:#FFFBEB;--warning-bd:#FCD34D;
+  --danger:#DC2626;--danger-bg:#FEF2F2;
+  --brand:#152338;--brand-mid:#1E3250;--brand-text:rgba(255,255,255,0.7);--brand-text-active:#FFFFFF;
+  --font:system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'Menlo','Monaco','Courier New',monospace;
+  --sidebar:220px;--hdr:56px;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;font-size:14px}
+#hdr{position:sticky;top:0;z-index:100;background:var(--brand);border-bottom:1px solid var(--brand-mid);height:var(--hdr);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0}
+#layout{display:flex;flex:1;height:calc(100vh - var(--hdr));overflow:hidden}
+#sidebar{width:var(--sidebar);background:var(--brand);border-right:1px solid var(--brand-mid);flex-shrink:0;overflow-y:auto;padding:10px 0}
+#main{flex:1;overflow-y:auto;padding:28px 28px 48px}
+.logo{font-weight:600;font-size:15px;color:#FFF}.logo-sub{font-weight:400;color:rgba(255,255,255,0.55);font-size:13px;margin-left:8px}
+.badge{background:rgba(184,132,26,0.2);border:1px solid rgba(184,132,26,0.5);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;color:#F5C842}
+.ns{padding:12px 18px 4px;font-size:10px;font-weight:600;color:rgba(255,255,255,0.3);letter-spacing:.08em;text-transform:uppercase}
+.nb{display:flex;align-items:center;gap:9px;width:100%;padding:9px 18px;border:none;background:transparent;color:var(--brand-text);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;text-align:left;border-left:3px solid transparent;transition:background .15s,color .15s}
+.nb:hover{background:rgba(255,255,255,0.07);color:var(--brand-text-active)}.nb.active{background:rgba(184,132,26,0.15);color:#F5C842;border-left-color:#B8841A;font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+h2{font-size:15px;font-weight:600;margin-bottom:14px}
+.sub{font-size:13px;color:var(--muted);margin-bottom:22px}
+table{width:100%;border-collapse:collapse}
+th{padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-align:left;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+tr:last-child td{border-bottom:none}
+.rate{font-family:var(--mono);font-size:13px}
+.best{font-family:var(--mono);font-size:13px;color:var(--success);font-weight:600}
+.ri{font-family:var(--mono);font-size:13px;width:72px;text-align:center;padding:4px 6px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg);color:var(--text);outline:none}
+.ri:focus{border-color:var(--accent)}
+button{font-family:var(--font);cursor:pointer}
+.btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid var(--border-strong);background:var(--surface);color:var(--text)}
+.btn:hover{background:var(--bg)}.btn-p{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-p:hover{opacity:.9}
+.btn-s{background:var(--success);color:#fff;border-color:var(--success)}.btn-s:hover{background:#047857}
+.btn-sm{padding:5px 11px;font-size:12px}
+.mode-tab{padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid var(--border-strong);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .1s}
+.mode-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.lvr-tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid var(--border-strong);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .1s}
+.lvr-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.lvr-tab.high.active{background:#7C3AED;border-color:#7C3AED}
+input,select,textarea{font-family:var(--font);font-size:13px;padding:8px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.08)}
+label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.metric{background:var(--bg);border-radius:10px;padding:16px}
+.ml{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.mv{font-size:22px;font-weight:600;line-height:1.2}
+.dz{border:2px dashed var(--border-strong);border-radius:10px;padding:22px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s}
+.dz:hover,.dz.over{border-color:var(--accent);background:var(--accent-bg)}
+.dz p{font-size:13px;color:var(--muted);margin-bottom:3px}.dz small{font-size:11px;color:var(--hint)}
+.di{font-size:20px;color:var(--hint);margin-bottom:8px}
+.preview{background:var(--success-bg);border:1px solid var(--success-bd);border-radius:10px;padding:14px;margin-top:12px}
+.preview h3{font-size:13px;font-weight:600;color:#065F46;margin-bottom:10px}
+.pr{display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px;color:#065F46}
+.alert{padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6;margin-bottom:12px}
+.aw{background:var(--warning-bg);border:1px solid var(--warning-bd);color:var(--warning)}
+.as{background:var(--success-bg);border:1px solid var(--success-bd);color:#065F46}
+.ai{background:var(--accent-bg);border:1px solid #BFDBFE;color:#1e3a8a}
+.pending-banner{background:var(--danger-bg);border:1px solid #FECACA;border-radius:10px;padding:20px;text-align:center;margin-bottom:16px}
+.pending-banner h3{font-size:16px;font-weight:600;color:var(--danger);margin-bottom:6px}
+.pending-banner p{font-size:13px;color:#7F1D1D}
+.disc-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--warning-bg);border:1px solid var(--warning-bd);border-radius:8px;margin-bottom:18px}
+.disc-toggle input[type=checkbox]{width:auto;margin:0;cursor:pointer;flex-shrink:0}
+.disc-toggle label{text-transform:none;letter-spacing:0;font-weight:500;font-size:13px;color:var(--warning);cursor:pointer;margin:0}
+.tpl-card{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .1s,background .1s}
+.tpl-card:hover{border-color:var(--accent);background:var(--accent-bg)}
+.tpl-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+.tpl-label{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.tpl-meta{font-size:11px;color:var(--muted)}
+.freq-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.freq-card{border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.freq-card.active{border-color:var(--accent);background:var(--accent-bg)}
+.freq-amount{font-family:var(--mono);font-size:16px;font-weight:600;margin-bottom:2px}
+.freq-label{font-size:11px;color:var(--muted)}
+.sum-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:0.5px solid var(--border)}
+.sum-row:last-child{border-bottom:none}
+.sum-label{font-size:13px;color:var(--muted)}
+.sum-val{font-family:var(--mono);font-size:13px;font-weight:500}
+.bar-wrap{height:12px;background:var(--bg);border-radius:6px;overflow:hidden;margin-top:6px}
+.bar-p{height:100%;background:var(--accent);display:inline-block;vertical-align:top}
+.bar-i{height:100%;background:#BFDBFE;display:inline-block;vertical-align:top}
+.amort-row{cursor:pointer}.amort-row:hover{background:var(--bg)}
+.amort-row td,.amort-sub td{font-size:12px}
+.amort-sub{background:#FAFBFC}.amort-sub td{font-size:11px;color:var(--muted);padding:5px 12px}
+.lem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.lem-cell{background:var(--bg);border-radius:8px;padding:12px}
+.lem-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.lem-val{font-family:var(--mono);font-size:14px;font-weight:600}
+.chk-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);cursor:pointer}
+.chk-row:last-child{border-bottom:none}
+.chk-row input{width:auto;margin:0;cursor:pointer;flex-shrink:0}
+.chk-row label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;margin:0;flex:1}
+.preview-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono);margin-top:10px}
+.preview-table th{padding:6px 10px;background:var(--bg);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)}
+.preview-table td{padding:6px 10px;border-bottom:0.5px solid var(--border)}
+.preview-table tr:last-child td{border-bottom:none}
+#toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:9999;max-width:320px}
+#toast.show{opacity:1;transform:translateY(0)}.td{background:var(--danger)!important}
+#loader{position:fixed;inset:0;background:rgba(255,255,255,.75);display:none;align-items:center;justify-content:center;z-index:500}
+#loader.on{display:flex}
+.spin{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stripe{border-left:4px solid currentColor;padding-left:14px;border-radius:0}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="loader"><div class="spin"></div></div>
+
+<header id="hdr">
+  <div><span class="logo">Rate Desk</span><span class="logo-sub">Guardian Smith</span></div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="btn btn-sm" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff" onclick="gmailScan()">Scan Gmail now</button>
+    <div class="badge">Adviser use only</div>
+  </div>
+</header>
+
+<div id="layout">
+  <nav id="sidebar">
+    <div class="ns">Dashboard</div>
+    <button class="nb active" id="nav-overview" onclick="go('overview')">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+      Overview
+    </button>
+    <div class="ns">Banks</div>
+    <button class="nb" id="nav-BNZ"      onclick="go('BNZ')"><span class="dot" style="background:#00529B"></span>BNZ</button>
+    <button class="nb" id="nav-ASB"      onclick="go('ASB')"><span class="dot" style="background:#D0021B"></span>ASB</button>
+    <button class="nb" id="nav-Westpac"  onclick="go('Westpac')"><span class="dot" style="background:#C8102E"></span>Westpac</button>
+    <button class="nb" id="nav-ANZ"      onclick="go('ANZ')"><span class="dot" style="background:#007ABF"></span>ANZ</button>
+    <button class="nb" id="nav-Kiwibank" onclick="go('Kiwibank')"><span class="dot" style="background:#00A39B"></span>Kiwibank</button>
+    <button class="nb" id="nav-CoOp"     onclick="go('CoOp')"><span class="dot" style="background:#005B30"></span>Co-op</button>
+    <button class="nb" id="nav-SBS"      onclick="go('SBS')"><span class="dot" style="background:#003882"></span>SBS</button>
+    <button class="nb" id="nav-TSB"      onclick="go('TSB')"><span class="dot" style="background:#E31837"></span>TSB</button>
+    <div class="ns">Tools</div>
+    <button class="nb" id="nav-email" onclick="go('email')">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg>
+      Email drafter
+    </button>
+    <button class="nb" id="nav-calc" onclick="go('calc')">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/><path d="M4 2.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5zm0 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5z"/></svg>
+      Calculator
+    </button>
+    <button class="nb" id="nav-ratelog" onclick="go('ratelog')">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/><path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"/></svg>
+      Rate log
+    </button>
+    <div style="padding:16px 18px;border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;font-size:10px;color:rgba(255,255,255,0.3);line-height:1.6">
+      Rates for adviser reference only. Not for client distribution.
+    </div>
+  </nav>
+
+  <main id="main">
+    <div id="tab-overview"></div>
+    <div id="tab-BNZ"      style="display:none"></div>
+    <div id="tab-ASB"      style="display:none"></div>
+    <div id="tab-Westpac"  style="display:none"></div>
+    <div id="tab-ANZ"      style="display:none"></div>
+    <div id="tab-Kiwibank" style="display:none"></div>
+    <div id="tab-CoOp"     style="display:none"></div>
+    <div id="tab-SBS"      style="display:none"></div>
+    <div id="tab-TSB"      style="display:none"></div>
+    <div id="tab-email"    style="display:none"></div>
+    <div id="tab-calc"     style="display:none"></div>
+    <div id="tab-ratelog"  style="display:none"></div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+var TERMS=['6 month','1 year','18 month','2 year','3 year','4 year','5 year'];
+var COLORS={BNZ:'#00529B',ASB:'#D0021B',Westpac:'#C8102E',ANZ:'#007ABF',Kiwibank:'#00A39B',CoOp:'#005B30',SBS:'#003882',TSB:'#E31837'};
+var NAMES={BNZ:'Bank of New Zealand',ASB:'ASB Bank',Westpac:'Westpac NZ',ANZ:'ANZ Bank NZ',Kiwibank:'Kiwibank',CoOp:'Co-operative Bank',SBS:'SBS Bank',TSB:'TSB Bank'};
+var BANKS_ORDER=['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB'];
+
+var LVR_BANDS=[
+  {id:'le80',  label:'<=80% LVR', desc:'Discretionary rate'},
+  {id:'b80_85',label:'80-85% LVR',desc:'Base >80% rate (LEM tier 1)'},
+  {id:'b85_90',label:'85-90% LVR',desc:'Base + LEM tier 2'},
+  {id:'b90_95',label:'90-95% LVR',desc:'Base + LEM tier 3'}
+];
+
+// Universal refix template — all banks use this. Advisers can customise and save per-browser.
+var DEFAULT_REFIX_TEMPLATE =
+"Subject: Loan Refixing: [Client Name] - [Bank Name] Refix Window Open\n\n" +
+"Hi [Client Name],\n\n" +
+"Hope you're doing well and having a good week so far.\n\n" +
+"Just touching base as one of your loans is coming up for refix on [Insert Date], so you're now within your [Refix Window] refix window with [Bank Name].\n\n" +
+"There's been quite a bit happening with interest rates recently. Most economists are signaling that we have now hit the bottom of the interest rate market, and as a result, we're seeing a lot of clients looking to lock something in sooner rather than later for a bit of certainty.\n\n" +
+"Currently, the two- and three-year terms seem to be the sweet spot. We've noticed the four- and five-year rates have increased slightly further recently, making them a bit less appealing compared to the other options. However, if flexibility is your priority, a shorter-term rate is always a good option to keep your doors open.\n\n" +
+"Current [Bank Name] Rates (Under 80% LVR):\n\n" +
+"[INSERT SCREENSHOT OF CURRENT RATES HERE]\n\n" +
+"Please note: Rates change daily and nothing is locked in until I have your confirmation and have submitted this to the bank.\n\n" +
+"Next Steps: Once you've had a look, let me know which option you'd like to go with, and whether you'd like to keep repayments at a specific level or move to the new minimum.\n\n" +
+"Cheers, [Adviser Name]";
+
+// Per-bank refix info — window period, process type, bankId for live rate lookup
+var BANK_REFIX_INFO = {
+  BNZ:      {label:'BNZ',      window:'60 days', process:'Client refixes via app', bankId:'BNZ'},
+  ASB:      {label:'ASB',      window:'35 days', process:'Client refixes via app', bankId:'ASB'},
+  Westpac:  {label:'Westpac',  window:'60 days', process:'Client refixes via app', bankId:'Westpac'},
+  ANZ:      {label:'ANZ',      window:'60 days', process:'Client refixes via app', bankId:'ANZ'},
+  Kiwibank: {label:'Kiwibank', window:'30 days', process:'Client refixes via app', bankId:'Kiwibank'},
+  CoOp:     {label:'Co-op',    window:'30 days', process:'You refix for them',    bankId:'CoOp'},
+  SBS:      {label:'SBS',      window:'30 days', process:'You refix for them',    bankId:'SBS'},
+  TSB:      {label:'TSB',      window:'40 days', process:'You refix for them',    bankId:'TSB'},
+  AIA:      {label:'AIA',      window:'30 days', process:'You refix for them',    bankId:null}
+};
+
+var banks={}, editingBank=null, editData={}, pendingExtraction={};
+var emailMode='rateupdate';
+var calcMode='single', expandedYears={A:{},B:{}};
+var selectedLVRBand='le80';
+var calcLVRBand='le80';
+
+// ============================================================
+// RATE HELPERS
+// ============================================================
+function getRateForBand(b,term,band){
+  var r=(b.fixedRates||[]).find(function(x){return x.term===term;});
+  if(!r) return null;
+  var lem=b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50};
+  if(band==='le80')   return r.disc>0?r.disc:null;
+  if(band==='b80_85') return r.highLVR>0?r.highLVR+(lem.b80_85||0):null;
+  if(band==='b85_90') return r.highLVR>0?r.highLVR+(lem.b85_90||0.25):null;
+  if(band==='b90_95') return r.highLVR>0?r.highLVR+(lem.b90_95||0.50):null;
+  return r.disc>0?r.disc:null;
+}
+
+// Returns the PREVIOUS rate for a band - used for movement indicators
+function getPrevRateForBand(b,term,band){
+  var prev=(b.prevFixedRates||[]).find(function(x){return x.term===term;});
+  if(!prev) return null;
+  var lem=b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50};
+  if(band==='le80')   return prev.disc>0?prev.disc:null;
+  if(band==='b80_85') return prev.highLVR>0?prev.highLVR+(lem.b80_85||0):null;
+  if(band==='b85_90') return prev.highLVR>0?prev.highLVR+(lem.b85_90||0.25):null;
+  if(band==='b90_95') return prev.highLVR>0?prev.highLVR+(lem.b90_95||0.50):null;
+  return prev.disc>0?prev.disc:null;
+}
+
+// Returns an up/down movement badge span, or '' if no change / no previous data
+function mvBadge(current,prev){
+  if(prev===null||prev===undefined) return '';
+  var delta=parseFloat(current)-parseFloat(prev);
+  if(Math.abs(delta)<0.001) return '';
+  var up=delta>0;
+  return '<span style="font-size:9px;font-weight:700;color:'+(up?'var(--danger)':'var(--success)')+
+    ';margin-left:3px;vertical-align:middle">'+(up?'&#9650;':'&#9660;')+Math.abs(delta).toFixed(2)+'%</span>';
+}
+
+function getBandLabel(band){
+  var b=LVR_BANDS.find(function(x){return x.id===band;});
+  return b?b.label:'<=80% LVR';
+}
+
+function calcPayment(principal,annualRate,termYears,freq){
+  var ppy=freq==='Weekly'?52:freq==='Fortnightly'?26:12;
+  var n=termYears*ppy, r=(annualRate/100)/ppy;
+  if(r===0) return {payment:principal/n,n:n,r:r,ppy:ppy};
+  return {payment:principal*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1),n:n,r:r,ppy:ppy};
+}
+
+function nzd(n){return '$'+Math.round(n).toLocaleString('en-NZ');}
+
+window.addEventListener('load',function(){
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      try{
+        banks=JSON.parse(j);
+        Object.keys(banks).forEach(function(id){
+          banks[id].id=id; banks[id].color=COLORS[id]||'#555'; banks[id].fullName=NAMES[id]||id;
+          if(!banks[id].lemBands) banks[id].lemBands={b80_85:0,b85_90:0.25,b90_95:0.50};
+          if(!banks[id].prevFixedRates) banks[id].prevFixedRates=[];
+        });
+        renderAll();
+      } catch(e){ console.error('Render error:',e.message); }
+      load(false);
+    })
+    .withFailureHandler(function(e){ console.error('getAllRates failed:',e); toast('Failed to load rates - check setup','d'); load(false); })
+    .getAllRates();
+});
+
+function go(tab){
+  document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('active');});
+  var n=document.getElementById('nav-'+tab); if(n)n.classList.add('active');
+  document.querySelectorAll('#main>div').forEach(function(d){d.style.display='none';});
+  var t=document.getElementById('tab-'+tab); if(t)t.style.display='block';
+  if(tab==='calc') renderCalc();
+  if(tab==='ratelog') renderRateLog();
+}
+
+function renderAll(){
+  renderOverview();
+  BANKS_ORDER.forEach(function(id){if(banks[id])renderBank(id);});
+  renderEmail();
+}
+
+function setLVRBand(band){selectedLVRBand=band;renderOverview();}
+
+// ============================================================
+// OVERVIEW
+// ============================================================
+function renderFloatingOverview(){
+  var active=BANKS_ORDER.filter(function(id){return banks[id]&&!banks[id].isPending;});
+  if(!active.length) return '';
+
+  // Find best floating disc rate per bank
+  var floatBest=BANKS_ORDER.map(function(id){
+    var b=banks[id]; if(!b||b.isPending) return null;
+    var valid=(b.floatingRates||[]).filter(function(r){return r.disc>0;});
+    if(!valid.length) return null;
+    return Math.min.apply(null,valid.map(function(r){return r.disc;}));
+  });
+  var allValid=floatBest.filter(function(v){return v!==null;});
+  if(!allValid.length) return '';
+  var overallBest=Math.min.apply(null,allValid);
+
+  var cells=BANKS_ORDER.map(function(id,idx){
+    var v=floatBest[idx];
+    if(v===null) return '<td style="color:var(--hint);font-size:12px">--</td>';
+    var isBest=Math.abs(v-overallBest)<0.001;
+    return '<td><span class="'+(isBest?'best':'rate')+'">'+v.toFixed(2)+'%'+(isBest?' *':'')+'</span></td>';
+  }).join('');
+
+  return '<div class="card" style="margin-bottom:16px">'+
+    '<h2>Floating / variable rates <span style="font-size:12px;font-weight:400;color:var(--muted)">— best discretionary &lt;=80% LVR</span></h2>'+
+    '<div style="overflow-x:auto"><table><thead><tr><th>Type</th>'+
+    BANKS_ORDER.map(function(id){return '<th style="border-left:3px solid '+(COLORS[id]||'#ccc')+'">'+(id==='CoOp'?'Co-op':id)+'</th>';}).join('')+
+    '</tr></thead><tbody><tr><td style="font-weight:500">Variable / floating</td>'+cells+'</tr></tbody></table></div>'+
+    '<p style="font-size:11px;color:var(--muted);margin-top:10px">Lowest discretionary floating rate per bank shown. Check individual bank tabs for full product breakdown.</p>'+
+    '</div>';
+}
+
+function renderOverview(){
+  var active=BANKS_ORDER.filter(function(id){return banks[id]&&!banks[id].isPending;});
+  var pending=BANKS_ORDER.filter(function(id){return banks[id]&&banks[id].isPending;});
+  var dates=[].concat(active.map(function(id){return banks[id].lastUpdated;})).filter(function(v,i,a){return a.indexOf(v)===i;}).join(' / ')||'--';
+
+  var bandSelector='<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;align-items:center">' +
+    '<span style="font-size:12px;color:var(--muted);font-weight:500;margin-right:4px">LVR band:</span>' +
+    LVR_BANDS.map(function(b){return '<button class="lvr-tab'+(b.id!=='le80'?' high':'')+(selectedLVRBand===b.id?' active':'')+'" onclick="setLVRBand(\''+b.id+'\')">'+b.label+'</button>';}).join('') +
+    '<span style="font-size:11px;color:var(--muted);margin-left:8px">'+LVR_BANDS.find(function(x){return x.id===selectedLVRBand;}).desc+'</span>' +
+  '</div>';
+
+  var termRows=TERMS.map(function(term){
+    var rates=active.map(function(id){return getRateForBand(banks[id],term,selectedLVRBand);});
+    var validRates=rates.filter(function(r){return r!==null&&r>0;});
+    var bestRate=validRates.length?Math.min.apply(null,validRates):null;
+    var cells=BANKS_ORDER.map(function(id){
+      var b=banks[id]; if(!b) return '<td></td>';
+      if(b.isPending) return '<td style="color:var(--hint);font-size:11px">Pending</td>';
+      var rate=getRateForBand(b,term,selectedLVRBand);
+      if(rate===null||rate===0) return '<td>--</td>';
+      var isBest=bestRate!==null&&Math.abs(rate-bestRate)<0.001;
+      var prevRate=getPrevRateForBand(b,term,selectedLVRBand);
+      var mv=mvBadge(rate,prevRate);
+      return '<td><span class="'+(isBest?'best':'rate')+'">'+rate.toFixed(2)+'%'+(isBest?' *':'')+'</span>'+mv+'</td>';
+    }).join('');
+    return '<tr><td style="font-weight:500">'+term+'</td>'+cells+'</tr>';
+  }).join('');
+
+  var best1=null;
+  active.forEach(function(id){var r=getRateForBand(banks[id],'1 year',selectedLVRBand);if(r&&r>0&&(best1===null||r<best1))best1=r;});
+
+  var bankCards=BANKS_ORDER.map(function(id){
+    var b=banks[id]; if(!b) return '';
+    if(b.isPending) return '<div class="card" style="border-top:3px solid '+b.color+';padding:18px;margin-bottom:0;opacity:.6"><div style="font-weight:600;font-size:14px;margin-bottom:2px">'+b.fullName+'</div><div style="font-size:11px;color:var(--muted)">Awaiting rate card</div></div>';
+    var bestDisc=null;
+    (b.fixedRates||[]).forEach(function(r){var v=getRateForBand(b,r.term,selectedLVRBand);if(v&&v>0&&(bestDisc===null||v<bestDisc))bestDisc=v;});
+    var cashbackVal=b.cashback||'--';
+    return '<div class="card" style="border-top:3px solid '+b.color+';padding:18px;margin-bottom:0">'+
+      '<div style="font-weight:600;font-size:14px;margin-bottom:2px">'+b.fullName+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Updated '+b.lastUpdated+'</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:10px;align-items:center">'+
+        '<span style="font-size:11px;color:var(--muted)">Best disc. rate</span>'+
+        '<span class="best" style="font-size:14px">'+(bestDisc?bestDisc.toFixed(2)+'%':'--')+'</span>'+
+      '</div>'+
+      '<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Cashback</div>'+
+        '<div style="font-size:12px;color:var(--text);line-height:1.5">'+cashbackVal+'</div>'+
+        '<div style="font-size:10px;color:var(--hint);margin-top:6px">Edit in the bank tab</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  var pendingNote=pending.length?'<div class="alert ai" style="margin-bottom:18px">'+pending.length+' bank'+(pending.length>1?'s':'')+' pending: <strong>'+pending.map(function(id){return NAMES[id];}).join(', ')+'</strong></div>':'';
+  var lemNote=selectedLVRBand!=='le80'?'<div class="alert aw" style="margin-bottom:12px">Showing LEM-adjusted rates for '+getBandLabel(selectedLVRBand)+'. LEM margins are estimates - verify and update on each bank tab.</div>':'';
+  var mvNote='<div style="font-size:11px;color:var(--muted);margin-bottom:14px">&#9650; / &#9660; Movement indicators show change from previous rate card.</div>';
+
+  document.getElementById('tab-overview').innerHTML=
+    '<h1>Rate overview</h1><p class="sub">'+getBandLabel(selectedLVRBand)+' rates for active banks - best rate per term marked *</p>' +
+    bandSelector + pendingNote + lemNote +
+    '<div class="metrics"><div class="metric"><div class="ml">Best 1-year rate</div><div class="mv" style="color:var(--success);font-family:var(--mono)">'+(best1?best1.toFixed(2)+'%':'--')+'</div></div><div class="metric"><div class="ml">Active banks</div><div class="mv">'+active.length+' / '+BANKS_ORDER.length+'</div></div><div class="metric"><div class="ml">Most recent update</div><div class="mv" style="font-size:13px;padding-top:4px">'+dates+'</div></div></div>' +
+    '<div class="card" style="margin-bottom:16px"><h2>Fixed rate comparison - '+getBandLabel(selectedLVRBand)+'</h2>'+mvNote+'<div style="overflow-x:auto"><table><thead><tr><th>Term</th>'+BANKS_ORDER.map(function(id){return '<th style="border-left:3px solid '+(COLORS[id]||'#ccc')+'">'+(id==='CoOp'?'Co-op':id)+'</th>';}).join('')+'</tr></thead><tbody>'+termRows+'</tbody></table></div></div>' +
+    renderFloatingOverview() +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'+bankCards+'</div>' +
+    '<div class="alert aw" style="margin-top:14px">Adviser use only - not for client distribution. All rates % p.a., subject to change without notice.</div>';
+}
+
+// ============================================================
+// BANK TAB
+// ============================================================
+function renderBank(bankId){
+  var b=banks[bankId], isEdit=editingBank===bankId;
+  var fixedR=isEdit?editData.fixedRates:b.fixedRates;
+  var floatR=isEdit?editData.floatingRates:b.floatingRates;
+  var lem=isEdit?(editData.lemBands||b.lemBands):(b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50});
+
+  var btns=isEdit?'<button class="btn btn-p" onclick="saveBank(\''+bankId+'\')">Save changes</button><button class="btn" style="margin-left:8px" onclick="cancelEdit(\''+bankId+'\')">Cancel</button>':'<button class="btn" onclick="startEdit(\''+bankId+'\')">Edit rates</button>';
+
+  // rc: renders a rate cell. Shows movement badge on discretionary column.
+  function rc(v,i,f,t){
+    if(isEdit) return '<input class="ri" type="number" step="0.01" value="'+v+'" oninput="upEdit(\''+bankId+'\',\''+t+'\','+i+',\''+f+'\',this.value)">';
+    var numV=parseFloat(v);
+    var display=(numV>0?numV.toFixed(2)+'%':'--');
+    if(t==='fixed'&&f==='disc'&&numV>0){
+      var term=(fixedR[i]||{}).term;
+      var prevR=(b.prevFixedRates||[]).find(function(x){return x.term===term;});
+      if(prevR&&prevR.disc>0) return '<span class="rate">'+display+'</span>'+mvBadge(numV,prevR.disc);
+    }
+    return '<span class="rate">'+display+'</span>';
+  }
+
+  // Column headers renamed: Advertised | Discretionary | Carded
+  var fixedTbl='<table><thead><tr><th>Term</th><th>Advertised</th><th>Discretionary</th><th>Carded</th></tr></thead><tbody>'+
+    (fixedR||[]).map(function(r,i){return '<tr><td style="font-weight:500">'+r.term+'</td>'+['adv','disc','highLVR'].map(function(f){return '<td>'+rc(r[f],i,f,'fixed')+'</td>';}).join('')+'</tr>';}).join('')+
+    '</tbody></table>';
+
+  var floatTbl='<table><thead><tr><th>Product</th><th>Advertised</th><th>Discretionary</th><th>Carded</th></tr></thead><tbody>'+
+    (floatR||[]).map(function(r,i){return '<tr><td style="font-weight:500">'+r.name+'</td>'+['adv','disc','highLVR'].map(function(f){return '<td>'+rc(r[f],i,f,'float')+'</td>';}).join('')+'</tr>';}).join('')+
+    '</tbody></table>';
+
+  var lemInputs=isEdit
+    ?'<div class="lem-grid">'+
+      '<div class="lem-cell"><div class="lem-label">80-85% extra (%)</div><input id="lem-b80_85-'+bankId+'" type="number" step="0.01" style="font-family:var(--mono)" value="'+(lem.b80_85!=null?lem.b80_85:0)+'" oninput="upLEM(\''+bankId+'\',\'b80_85\',this.value)"></div>'+
+      '<div class="lem-cell"><div class="lem-label">85-90% extra (%)</div><input id="lem-b85_90-'+bankId+'" type="number" step="0.01" style="font-family:var(--mono)" value="'+(lem.b85_90!=null?lem.b85_90:0.25)+'" oninput="upLEM(\''+bankId+'\',\'b85_90\',this.value)"></div>'+
+      '<div class="lem-cell"><div class="lem-label">90-95% extra (%)</div><input id="lem-b90_95-'+bankId+'" type="number" step="0.01" style="font-family:var(--mono)" value="'+(lem.b90_95!=null?lem.b90_95:0.50)+'" oninput="upLEM(\''+bankId+'\',\'b90_95\',this.value)"></div>'+
+      '</div>'
+    :'<div class="lem-grid">'+
+      '<div class="lem-cell"><div class="lem-label">80-85% extra</div><div class="lem-val">+'+(lem.b80_85!=null?lem.b80_85:0).toFixed(2)+'%</div><div style="font-size:11px;color:var(--muted)">added to base &gt;80% rate</div></div>'+
+      '<div class="lem-cell"><div class="lem-label">85-90% extra</div><div class="lem-val">+'+(lem.b85_90!=null?lem.b85_90:0.25).toFixed(2)+'%</div><div style="font-size:11px;color:var(--muted)">added to base &gt;80% rate</div></div>'+
+      '<div class="lem-cell"><div class="lem-label">90-95% extra</div><div class="lem-val">+'+(lem.b90_95!=null?lem.b90_95:0.50).toFixed(2)+'%</div><div style="font-size:11px;color:var(--muted)">added to base &gt;80% rate</div></div>'+
+      '</div>';
+
+  var pendingBanner=b.isPending?'<div class="pending-banner"><h3>Rate card not yet received</h3><p>Drop a screenshot, PDF or email of the '+b.fullName+' rate card on the right.</p></div>':'';
+  var editBanner=isEdit?'<div class="alert aw" style="margin-bottom:14px"><label style="color:var(--warning);margin-bottom:6px">Rate card date</label><input id="ed-date-'+bankId+'" style="max-width:220px" value="'+(editData.lastUpdated||b.lastUpdated)+'"><p style="margin-top:6px">Edit rates and LEM margins below, then Save.</p></div>':'';
+
+  var hasPrev=(b.prevFixedRates||[]).length>0;
+  var mvNote=(!isEdit&&hasPrev)?'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">&#9650; / &#9660; indicators show change from previous rate card in the Discretionary column.</div>':'';
+
+  var cashbackCard='<div class="card"><h2>Cashback &amp; Notes</h2>'+
+    '<div style="margin-bottom:16px">'+
+      '<label>Cashback</label>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+        '<input id="cb-'+bankId+'" value="'+(b.cashback||'').replace(/"/g,'&quot;')+'" onkeydown="if(event.key===\'Enter\')saveCashback(\''+bankId+'\')">'+
+        '<button class="btn btn-p btn-sm" style="white-space:nowrap" onclick="saveCashback(\''+bankId+'\')">Save</button>'+
+      '</div>'+
+    '</div>'+
+    '<div>'+
+      '<label>Notes</label>'+
+      '<p style="font-size:13px;color:var(--muted);line-height:1.7">'+b.notes+'</p>'+
+    '</div>'+
+  '</div>';
+
+  document.getElementById('tab-'+bankId).innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px"><div><h1 class="stripe" style="color:'+b.color+'">'+b.fullName+'</h1><p class="sub" style="padding-left:18px">Last updated: '+b.lastUpdated+' - All rates % p.a.</p></div><div>'+btns+'</div></div>'+
+    pendingBanner+editBanner+
+    '<div style="display:grid;grid-template-columns:1fr 320px;gap:16px"><div>'+
+      '<div class="card"><h2>Fixed rates</h2>'+mvNote+fixedTbl+'</div>'+
+      '<div class="card"><h2>Floating / variable rates</h2>'+floatTbl+'</div>'+
+      '<div class="card"><h2>Low equity margins (LEM)</h2><p style="font-size:13px;color:var(--muted);margin-bottom:12px">Each band is the total margin added to the base &gt;80% rate for that LVR range — not cumulative. A client at 88% LVR pays base + the 85–90% margin only.</p>'+lemInputs+'</div>'+
+      cashbackCard+
+    '</div>'+
+    '<div><div class="card"><h2>Drop to update rates</h2>'+
+      '<div class="dz" id="dz-'+bankId+'" ondragover="event.preventDefault();this.classList.add(\'over\')" ondragleave="this.classList.remove(\'over\')" ondrop="handleDrop(event,\''+bankId+'\')" onclick="document.getElementById(\'fi-'+bankId+'\').click()"><div class="di">&#8659;</div><p>Drop rate card here</p><small>Screenshot - PDF - Email text</small></div>'+
+      '<input type="file" id="fi-'+bankId+'" accept="image/*,.pdf,.txt,.eml" style="display:none" onchange="fileIn(event,\''+bankId+'\')">'+
+      '<div id="ds-'+bankId+'" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>'+
+      '<div id="dp-'+bankId+'"></div></div></div></div>';
+}
+
+function startEdit(id){
+  var b=banks[id];
+  editData={lastUpdated:b.lastUpdated,isPending:b.isPending,
+    lemBands:Object.assign({},b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50}),
+    fixedRates:b.fixedRates.map(function(r){return Object.assign({},r);}),
+    floatingRates:b.floatingRates.map(function(r){return Object.assign({},r);}),
+    cashback:b.cashback,notes:b.notes};
+  editingBank=id; renderBank(id);
+}
+function cancelEdit(id){editingBank=null;editData={};renderBank(id);}
+function upEdit(id,t,i,f,v){var n=parseFloat(v)||0;if(t==='fixed')editData.fixedRates[i][f]=n;else editData.floatingRates[i][f]=n;}
+function upLEM(id,field,v){if(!editData.lemBands)editData.lemBands={};var n=parseFloat(v);editData.lemBands[field]=isNaN(n)?0:n;}
+
+function saveBank(id){
+  // Read directly from DOM inputs — belt-and-suspenders against oninput not having fired
+  var de=document.getElementById('ed-date-'+id); if(de) editData.lastUpdated=de.value;
+  if(!editData.lemBands) editData.lemBands={};
+  ['b80_85','b85_90','b90_95'].forEach(function(band){
+    var el=document.getElementById('lem-'+band+'-'+id);
+    if(el){var v=parseFloat(el.value);editData.lemBands[band]=isNaN(v)?0:v;}
+  });
+  editData.isPending=false;
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success){banks[id]=Object.assign(banks[id],editData);editingBank=null;editData={};renderBank(id);renderOverview();toast('Rates saved');}else toast('Save failed: '+r.error,'d');load(false);})
+    .withFailureHandler(function(){toast('Save failed','d');load(false);})
+    .updateBankRates(id,JSON.stringify(editData));
+}
+
+function saveCashback(id){
+  var inp=document.getElementById('cb-'+id); if(!inp) return;
+  var val=inp.value.trim(); if(!val) return;
+  var b=banks[id]; if(!b) return;
+  var rd=Object.assign({},b,{cashback:val});
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      var r=JSON.parse(j);
+      if(r.success){banks[id].cashback=val;renderBank(id);renderOverview();toast(id+' cashback updated');}
+      else{toast('Save failed: '+r.error,'d');}
+      load(false);
+    })
+    .withFailureHandler(function(){toast('Save failed','d');load(false);})
+    .updateBankRates(id,JSON.stringify(rd));
+}
+
+function handleDrop(e,id){e.preventDefault();document.getElementById('dz-'+id).classList.remove('over');if(e.dataTransfer.files[0])procFile(e.dataTransfer.files[0],id);}
+function fileIn(e,id){if(e.target.files[0])procFile(e.target.files[0],id);}
+function procFile(file,id){
+  var st=document.getElementById('ds-'+id); st.textContent='Reading '+file.name+'...';
+  var rd=new FileReader();
+  rd.onload=function(ev){
+    var b64=ev.target.result.split(',')[1], mime=file.type||'application/octet-stream';
+    st.textContent='Extracting rates with AI...';
+    google.script.run
+      .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success){showPreview(id,r.data);st.textContent='Extraction complete. Review below.';}else{st.textContent='Extraction failed: '+(r.error||'unknown');toast('AI extraction failed','d');}})
+      .withFailureHandler(function(){st.textContent='Extraction failed.';toast('Extraction failed','d');})
+      .extractRatesFromFile(b64,mime,id);
+  };
+  rd.readAsDataURL(file);
+}
+function showPreview(id,ex){
+  pendingExtraction[id]=ex;
+  var rows=(ex.fixedRates||[]).slice(0,4).map(function(r){return '<div class="pr"><span>'+r.term+'</span><span style="font-family:var(--mono)">'+parseFloat(r.disc).toFixed(2)+'%</span></div>';}).join('');
+  document.getElementById('dp-'+id).innerHTML='<div class="preview"><h3>Found '+(ex.fixedRates||[]).length+' rates - '+(ex.bankName||id)+' - '+(ex.lastUpdated||'date unknown')+'</h3>'+rows+'<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-s btn-sm" onclick="applyEx(\''+id+'\')">Apply to dashboard</button><button class="btn btn-sm" onclick="document.getElementById(\'dp-'+id+'\').innerHTML=\'\'">Dismiss</button></div></div>';
+}
+function applyEx(id){
+  var ex=pendingExtraction[id]; if(!ex){toast('No extraction data - please drop file again','d');return;}
+  var def=banks[id]||{};
+  var rd={isPending:false,lastUpdated:ex.lastUpdated||new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'}),lemBands:def.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50},fixedRates:ex.fixedRates||def.fixedRates,floatingRates:(ex.floatingRates&&ex.floatingRates.length)?ex.floatingRates:def.floatingRates,cashback:def.cashback,notes:def.notes};
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success){banks[id]=Object.assign(banks[id],rd);delete pendingExtraction[id];renderBank(id);renderOverview();toast(id+' rates updated');}else toast('Update failed: '+r.error,'d');load(false);})
+    .withFailureHandler(function(){toast('Update failed','d');load(false);})
+    .updateBankRates(id,JSON.stringify(rd));
+}
+
+// ============================================================
+// EMAIL DRAFTER
+// ============================================================
+function renderEmail(){
+  document.getElementById('tab-email').innerHTML=
+    '<h1>Email drafter</h1>' +
+    '<p class="sub">Draft client emails using current dashboard rates</p>' +
+    '<div style="display:flex;gap:8px;margin-bottom:24px">' +
+      '<button class="mode-tab'+(emailMode==='rateupdate'?' active':'')+'" onclick="setEmailMode(\'rateupdate\',this)">Rate update</button>' +
+      '<button class="mode-tab'+(emailMode==='refix'?' active':'')+'" onclick="setEmailMode(\'refix\',this)">Refix notice</button>' +
+      '<button class="mode-tab'+(emailMode==='premeeting'?' active':'')+'" onclick="setEmailMode(\'premeeting\',this)">Pre-meeting</button>' +
+    '</div>' +
+    '<div id="email-body"></div>';
+  renderEmailBody();
+}
+function setEmailMode(mode,btn){emailMode=mode;document.querySelectorAll('.mode-tab').forEach(function(b){b.classList.remove('active');});if(btn)btn.classList.add('active');renderEmailBody();}
+function renderEmailBody(){
+  if(emailMode==='rateupdate') renderRateUpdateEmail();
+  else if(emailMode==='refix') renderRefixEmail();
+  else renderPreMeetingEmail();
+}
+
+function renderRateUpdateEmail(){
+  var bankOpts=BANKS_ORDER.map(function(k){return '<option value="'+k+'">'+(k==='CoOp'?'Co-op Bank':NAMES[k])+'</option>';}).join('');
+  var termOpts=TERMS.map(function(t){return '<option>'+t+'</option>';}).join('');
+  document.getElementById('email-body').innerHTML=
+    '<div style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">' +
+      '<div><div class="card"><h2>Configure</h2>' +
+        '<div style="margin-bottom:14px"><label>Bank</label><select id="eb">'+bankOpts+'</select></div>' +
+        '<div style="margin-bottom:14px"><label>Client name</label><input id="ec" placeholder="e.g. Sarah Johnson"></div>' +
+        '<div style="margin-bottom:14px"><label>Focus term</label><select id="et">'+termOpts+'</select></div>' +
+        '<div style="margin-bottom:14px"><label>Context notes (optional)</label><textarea id="en" style="min-height:80px;resize:vertical" placeholder="e.g. Refixing in June..."></textarea></div>' +
+        '<div class="disc-toggle"><input type="checkbox" id="e-disc"><label for="e-disc">Include discretionary rates + disclaimer</label></div>' +
+        '<button class="btn btn-p" style="width:100%;padding:10px" onclick="genRateUpdateEmail()">Draft email</button>' +
+      '</div></div>' +
+      emailOutputPanel() + '</div>';
+}
+
+function renderRefixEmail(){
+  var bankOpts='<option value="">Select bank...</option>'+
+    Object.keys(BANK_REFIX_INFO).map(function(key){
+      var b=BANK_REFIX_INFO[key];
+      return '<option value="'+key+'">'+b.label+'</option>';
+    }).join('');
+
+  var savedTpl='';
+  try{ savedTpl=localStorage.getItem('ratedesk_refix_tpl')||''; }catch(e){}
+  var tplValue=escHtml(savedTpl||DEFAULT_REFIX_TEMPLATE);
+  var hasSaved=!!savedTpl;
+
+  document.getElementById('email-body').innerHTML=
+    '<div style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">'+
+    '<div>'+
+      '<div class="card"><h2>Client details</h2>'+
+        '<div style="margin-bottom:14px">'+
+          '<label>Bank</label>'+
+          '<select id="r-bank" onchange="updateRefixBankInfo()">'+bankOpts+'</select>'+
+          '<div id="r-bank-info" style="display:none;margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>'+
+        '</div>'+
+        '<div style="margin-bottom:14px"><label>Client name</label><input id="r-client" placeholder="e.g. Sarah Johnson"></div>'+
+        '<div style="margin-bottom:14px"><label>Refix date</label><input id="r-date" placeholder="e.g. 15 May 2026"></div>'+
+        '<div style="margin-bottom:14px"><label>Property / loan reference (optional)</label><input id="r-prop" placeholder="e.g. 12 Smith St"></div>'+
+        '<div style="margin-bottom:14px"><label>Your name (sign-off)</label><input id="r-adviser" placeholder="e.g. Ella"></div>'+
+        '<div style="margin-bottom:18px"><label>Personal notes (optional)</label><textarea id="r-notes" style="min-height:70px;resize:vertical" placeholder="e.g. just had a baby..."></textarea></div>'+
+        '<button class="btn btn-p" style="width:100%;padding:10px" onclick="genRefixEmail()">Draft refix email</button>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+          '<h2 style="margin:0">Email template</h2>'+
+          '<div style="display:flex;gap:6px">'+
+            '<button class="btn btn-p btn-sm" onclick="saveRefixTemplate()">Save</button>'+
+            '<button class="btn btn-sm" onclick="resetRefixTemplate()">Reset</button>'+
+          '</div>'+
+        '</div>'+
+        '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">'+
+          (hasSaved?'<span style="color:var(--success)">&#10003; Your saved template</span>&ensp;&middot;&ensp;':'')+'Saved per browser. Placeholders: [Client Name], [Bank Name], [Insert Date], [Refix Window], [INSERT SCREENSHOT OF CURRENT RATES HERE], [Adviser Name]'+
+        '</p>'+
+        '<textarea id="r-template" style="min-height:260px;resize:vertical;font-size:12px;line-height:1.65">'+tplValue+'</textarea>'+
+        '<div id="r-tpl-status" style="font-size:11px;color:var(--success);margin-top:6px;min-height:16px"></div>'+
+      '</div>'+
+    '</div>'+
+    emailOutputPanel()+
+    '</div>';
+}
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function updateRefixBankInfo(){
+  var key=document.getElementById('r-bank').value;
+  var el=document.getElementById('r-bank-info');
+  if(!el) return;
+  if(!key||!BANK_REFIX_INFO[key]){el.style.display='none';return;}
+  var b=BANK_REFIX_INFO[key];
+  var hasLiveRates=b.bankId&&banks[b.bankId]&&!banks[b.bankId].isPending;
+  var ratesBadge=hasLiveRates
+    ?'<span style="font-size:11px;color:var(--success);font-weight:500">&#10003; Live rates available</span>'
+    :'<span style="font-size:11px;color:var(--warning)">&#9888; No live rates — placeholder used</span>';
+  el.innerHTML=
+    '<span style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600">'+b.window+'</span>'+
+    '<span style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:11px">'+b.process+'</span>'+
+    ratesBadge;
+  el.style.display='flex';
+}
+
+function saveRefixTemplate(){
+  var el=document.getElementById('r-template'); if(!el) return;
+  try{
+    localStorage.setItem('ratedesk_refix_tpl',el.value);
+    var s=document.getElementById('r-tpl-status');
+    if(s){s.textContent='&#10003; Saved to this browser';s.style.color='var(--success)';}
+    setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},3000);
+  }catch(e){toast('Could not save to browser storage','d');}
+}
+
+function resetRefixTemplate(){
+  try{localStorage.removeItem('ratedesk_refix_tpl');}catch(e){}
+  var el=document.getElementById('r-template'); if(el) el.value=DEFAULT_REFIX_TEMPLATE;
+  var s=document.getElementById('r-tpl-status');
+  if(s){s.textContent='Template restored to default';s.style.color='var(--muted)';}
+  setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},2500);
+}
+
+function renderPreMeetingEmail(){
+  var active=BANKS_ORDER.filter(function(id){return banks[id]&&!banks[id].isPending;});
+  var bankOpts='<option value="">Select bank...</option>'+active.map(function(id){return '<option value="'+id+'">'+(id==='CoOp'?'Co-op Bank':NAMES[id])+'</option>';}).join('');
+  var lvrOpts=LVR_BANDS.map(function(b){return '<option value="'+b.id+'">'+b.label+'</option>';}).join('');
+  var termChecks=TERMS.map(function(t){
+    var checked=(t==='1 year'||t==='2 year'||t==='3 year');
+    return '<div class="chk-row"><input type="checkbox" id="pm-term-'+t.replace(' ','-')+'" value="'+t+'"'+(checked?' checked':'')+'>  <label for="pm-term-'+t.replace(' ','-')+'">'+t+'</label></div>';
+  }).join('');
+
+  document.getElementById('email-body').innerHTML=
+    '<div style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">' +
+      '<div>' +
+        '<div class="card"><h2>Meeting details</h2>' +
+          '<div style="margin-bottom:14px"><label>Client name</label><input id="pm-client" placeholder="e.g. Sarah & James Johnson"></div>' +
+          '<div style="margin-bottom:14px"><label>Meeting date</label><input id="pm-date" placeholder="e.g. Wednesday 30 April"></div>' +
+          '<div style="margin-bottom:14px"><label>Your name (sign-off)</label><input id="pm-adviser" placeholder="e.g. Paige"></div>' +
+          '<div style="margin-bottom:14px"><label>Context notes (optional)</label><textarea id="pm-notes" style="min-height:70px;resize:vertical" placeholder="e.g. First home buyers, looking for certainty..."></textarea></div>' +
+        '</div>' +
+        '<div class="card"><h2>Loan & rate settings</h2>' +
+          '<div style="margin-bottom:14px"><label>Loan amount ($)</label><input type="number" id="pm-amount" placeholder="e.g. 650000" oninput="updatePMPreview()"></div>' +
+          '<div style="margin-bottom:14px"><label>Repayment frequency</label><select id="pm-freq" onchange="updatePMPreview()"><option>Monthly</option><option>Fortnightly</option><option>Weekly</option></select></div>' +
+          '<div style="margin-bottom:14px"><label>LVR band</label><select id="pm-lvr" onchange="updatePMPreview()">'+lvrOpts+'</select></div>' +
+        '</div>' +
+        '<div class="card"><h2>Banks to compare</h2>' +
+          '<div style="margin-bottom:14px"><label>Bank A</label><select id="pm-bankA" onchange="updatePMPreview()">'+bankOpts+'</select></div>' +
+          '<div style="margin-bottom:14px"><label>Bank B</label><select id="pm-bankB" onchange="updatePMPreview()">'+bankOpts+'</select></div>' +
+        '</div>' +
+        '<div class="card"><h2>Terms to include</h2>'+termChecks+'<p style="font-size:11px;color:var(--muted);margin-top:10px">Selected terms will appear in the comparison table.</p></div>' +
+        '<button class="btn btn-p" style="width:100%;padding:10px" onclick="genPreMeetingEmail()">Draft email</button>' +
+      '</div>' +
+      '<div>' +
+        '<div class="card" id="pm-preview-card" style="margin-bottom:16px">' +
+          '<h2>Rate comparison preview</h2>' +
+          '<div id="pm-preview" style="color:var(--muted);font-size:13px">Select banks, loan amount, and terms to preview the comparison table.</div>' +
+        '</div>' +
+        emailOutputPanel() +
+      '</div>' +
+    '</div>';
+}
+
+function getSelectedTerms(){
+  return TERMS.filter(function(t){
+    var el=document.getElementById('pm-term-'+t.replace(' ','-'));
+    return el&&el.checked;
+  });
+}
+
+function updatePMPreview(){
+  var bankAId=document.getElementById('pm-bankA').value;
+  var bankBId=document.getElementById('pm-bankB').value;
+  var amount=parseFloat(document.getElementById('pm-amount').value)||0;
+  var freq=document.getElementById('pm-freq').value||'Monthly';
+  var lvrBand=document.getElementById('pm-lvr').value||'le80';
+  var terms=getSelectedTerms();
+  var preview=document.getElementById('pm-preview');
+  if(!preview) return;
+  if(!bankAId||!bankBId||!amount||!terms.length){preview.innerHTML='<span style="color:var(--muted);font-size:13px">Select both banks, loan amount, and at least one term.</span>';return;}
+  if(bankAId===bankBId){preview.innerHTML='<span style="color:var(--danger);font-size:13px">Please select two different banks.</span>';return;}
+  var bA=banks[bankAId], bB=banks[bankBId];
+  var nameA=NAMES[bankAId]||bankAId, nameB=NAMES[bankBId]||bankBId;
+  var tbl='<table class="preview-table"><thead><tr><th>Term</th><th>'+nameA+' rate</th><th>'+nameA+' repayment</th><th>'+nameB+' rate</th><th>'+nameB+' repayment</th></tr></thead><tbody>';
+  terms.forEach(function(term){
+    var rA=getRateForBand(bA,term,lvrBand), rB=getRateForBand(bB,term,lvrBand);
+    var repA=rA&&rA>0?nzd(calcPayment(amount,rA,30,freq).payment)+'/'+freq.toLowerCase().slice(0,2):'--';
+    var repB=rB&&rB>0?nzd(calcPayment(amount,rB,30,freq).payment)+'/'+freq.toLowerCase().slice(0,2):'--';
+    tbl+='<tr><td style="font-weight:500">'+term+'</td>'+
+      '<td>'+(rA&&rA>0?rA.toFixed(2)+'%':'--')+'</td><td>'+repA+'</td>'+
+      '<td>'+(rB&&rB>0?rB.toFixed(2)+'%':'--')+'</td><td>'+repB+'</td></tr>';
+  });
+  tbl+='</tbody></table>';
+  tbl+='<p style="font-size:11px;color:var(--muted);margin-top:8px">Repayments based on $'+amount.toLocaleString('en-NZ')+' over 30 years - '+getBandLabel(lvrBand)+'</p>';
+  preview.innerHTML=tbl;
+}
+
+function buildPMComparisonText(){
+  var bankAId=document.getElementById('pm-bankA').value;
+  var bankBId=document.getElementById('pm-bankB').value;
+  var amount=parseFloat(document.getElementById('pm-amount').value)||0;
+  var freq=document.getElementById('pm-freq').value||'Monthly';
+  var lvrBand=document.getElementById('pm-lvr').value||'le80';
+  var terms=getSelectedTerms();
+  var bA=banks[bankAId], bB=banks[bankBId];
+  var nameA=NAMES[bankAId]||bankAId, nameB=NAMES[bankBId]||bankBId;
+  var freqShort=freq==='Monthly'?'monthly':freq==='Fortnightly'?'fortnightly':'weekly';
+  var lines=[nameA+' vs '+nameB+' - '+getBandLabel(lvrBand),'Loan: $'+amount.toLocaleString('en-NZ')+' over 30 years ('+freqShort+' repayments)',''];
+  lines.push(padR('Term',12)+padR(nameA+' Rate',16)+padR(nameA+' Repayment',22)+padR(nameB+' Rate',16)+nameB+' Repayment');
+  lines.push('-'.repeat(80));
+  terms.forEach(function(term){
+    var rA=getRateForBand(bA,term,lvrBand), rB=getRateForBand(bB,term,lvrBand);
+    var repA=rA&&rA>0?nzd(calcPayment(amount,rA,30,freq).payment)+'/'+freqShort.slice(0,2):'N/A';
+    var repB=rB&&rB>0?nzd(calcPayment(amount,rB,30,freq).payment)+'/'+freqShort.slice(0,2):'N/A';
+    lines.push(padR(term,12)+padR(rA&&rA>0?rA.toFixed(2)+'%':'N/A',16)+padR(repA,22)+padR(rB&&rB>0?rB.toFixed(2)+'%':'N/A',16)+repB);
+  });
+  return lines.join('\n');
+}
+function padR(s,n){s=String(s);while(s.length<n)s+=' ';return s;}
+
+function genPreMeetingEmail(){
+  var bankAId=document.getElementById('pm-bankA').value;
+  var bankBId=document.getElementById('pm-bankB').value;
+  var amount=parseFloat(document.getElementById('pm-amount').value)||0;
+  var terms=getSelectedTerms();
+  if(!bankAId||!bankBId){toast('Please select both banks','d');return;}
+  if(bankAId===bankBId){toast('Please select two different banks','d');return;}
+  if(!amount){toast('Please enter a loan amount','d');return;}
+  if(!terms.length){toast('Please select at least one term','d');return;}
+  var freq=document.getElementById('pm-freq').value||'Monthly';
+  var lvrBand=document.getElementById('pm-lvr').value||'le80';
+  var cfg={
+    clientName:  document.getElementById('pm-client').value||'',
+    meetingDate: document.getElementById('pm-date').value||'our upcoming meeting',
+    adviserName: document.getElementById('pm-adviser').value||'Your Name',
+    notes:       document.getElementById('pm-notes').value||'',
+    loanAmount:  amount.toLocaleString('en-NZ'),
+    freq:        freq.toLowerCase(),
+    lvrBandLabel: getBandLabel(lvrBand),
+    bankAName:   NAMES[bankAId]||bankAId,
+    bankBName:   NAMES[bankBId]||bankBId,
+    comparisonTable: buildPMComparisonText()
+  };
+  showDraftLoading('Building comparison and drafting email...');
+  google.script.run
+    .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success)showDraftResult(r.email);else showDraftError(r.error);})
+    .withFailureHandler(function(){showDraftError('please try again');})
+    .generatePreMeetingEmail(JSON.stringify(cfg));
+}
+
+function emailOutputPanel(){return '<div class="card" style="min-height:440px;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">Drafted email</h2><button class="btn btn-sm" id="cpbtn" style="display:none" onclick="cpEmail()">Copy to clipboard</button></div><div id="eph" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--hint);font-size:14px;text-align:center;padding:40px">Configure and draft to get started.</div><textarea id="eout" style="display:none;flex:1;min-height:360px;resize:vertical;line-height:1.8;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg)"></textarea></div>';}
+function showDraftLoading(msg){var ph=document.getElementById('eph'),out=document.getElementById('eout');if(ph){ph.style.display='flex';ph.textContent=msg||'Drafting...';}if(out)out.style.display='none';var cp=document.getElementById('cpbtn');if(cp)cp.style.display='none';}
+function showDraftResult(text){var ph=document.getElementById('eph'),out=document.getElementById('eout');if(!out)return;if(ph)ph.style.display='none';out.value=text;out.style.display='block';var cp=document.getElementById('cpbtn');if(cp)cp.style.display='inline-block';}
+function showDraftError(msg){var ph=document.getElementById('eph');if(ph)ph.textContent='Generation failed: '+(msg||'please try again');}
+
+function genRateUpdateEmail(){
+  var cfg={bankId:document.getElementById('eb').value,clientName:document.getElementById('ec').value,focusTerm:document.getElementById('et').value,notes:document.getElementById('en').value,includeDisc:document.getElementById('e-disc').checked};
+  showDraftLoading('Drafting rate update email...');
+  google.script.run.withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success)showDraftResult(r.email);else showDraftError(r.error);}).withFailureHandler(function(){showDraftError('please try again');}).generateClientEmail(JSON.stringify(cfg));
+}
+
+function genRefixEmail(){
+  var bankKey=document.getElementById('r-bank').value;
+  if(!bankKey){toast('Please select a bank first','d');return;}
+  var bankInfo=BANK_REFIX_INFO[bankKey];
+  if(!bankInfo){toast('Unknown bank selected','d');return;}
+  var templateBody=(document.getElementById('r-template')||{}).value||DEFAULT_REFIX_TEMPLATE;
+  var cfg={
+    bankId:       bankInfo.bankId,
+    bankLabel:    bankInfo.label,
+    refixWindow:  bankInfo.window,
+    process:      bankInfo.process,
+    templateBody: templateBody,
+    clientName:   (document.getElementById('r-client')||{}).value||'',
+    refixDate:    (document.getElementById('r-date')||{}).value||'',
+    propertyRef:  (document.getElementById('r-prop')||{}).value||'',
+    adviserName:  (document.getElementById('r-adviser')||{}).value||'Your Name',
+    notes:        (document.getElementById('r-notes')||{}).value||''
+  };
+  showDraftLoading('Filling template with live rates...');
+  google.script.run
+    .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success)showDraftResult(r.email);else showDraftError(r.error);})
+    .withFailureHandler(function(){showDraftError('please try again');})
+    .generateRefixEmail(JSON.stringify(cfg));
+}
+function cpEmail(){var out=document.getElementById('eout');if(!out)return;navigator.clipboard.writeText(out.value).then(function(){var b=document.getElementById('cpbtn');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy to clipboard';},2000);});}
+
+// ============================================================
+// GMAIL SCAN
+// ============================================================
+function gmailScan(){
+  load(true);
+  toast('Scanning Gmail...');
+  google.script.run
+    .withSuccessHandler(function(j){
+      load(false);
+      try{
+        var r=JSON.parse(j);
+        if(r.updated&&r.updated.length){
+          toast('Updated: '+r.updated.map(function(u){return u.bankId;}).join(', '));
+          setTimeout(function(){
+            load(true);
+            google.script.run
+              .withSuccessHandler(function(data){
+                try{
+                  banks=JSON.parse(data);
+                  Object.keys(banks).forEach(function(id){
+                    banks[id].id=id; banks[id].color=COLORS[id]||'#555'; banks[id].fullName=NAMES[id]||id;
+                    if(!banks[id].lemBands)banks[id].lemBands={b80_85:0,b85_90:0.25,b90_95:0.50};
+                    if(!banks[id].prevFixedRates)banks[id].prevFixedRates=[];
+                  });
+                  renderAll();
+                } catch(e){toast('Render error after update','d');}
+                load(false);
+              })
+              .withFailureHandler(function(){toast('Refresh failed - reload the page manually','d');load(false);})
+              .getAllRates();
+          },1000);
+        } else {
+          toast('No new rate cards found');
+        }
+      } catch(e){toast('Unexpected response from scan','d');}
+    })
+    .withFailureHandler(function(e){
+      load(false);
+      toast('Gmail scan failed - check Gmail permissions in Apps Script','d');
+      console.error('gmailScan error:',e);
+    })
+    .scanGmailForRates();
+}
+
+// ============================================================
+// NEGOTIATED RATE LOG
+// ============================================================
+var rateLogEntries=[], rateLogFilter='active';
+
+function renderRateLog(){
+  var el=document.getElementById('tab-ratelog');
+  var bankOpts=BANKS_ORDER.map(function(id){return '<option value="'+id+'">'+(id==='CoOp'?'Co-op':NAMES[id])+'</option>';}).join('');
+  var termOpts=TERMS.map(function(t){return '<option>'+t+'</option>';}).join('');
+
+  el.innerHTML=
+    '<h1>Negotiated rate log</h1>'+
+    '<p class="sub">Shared log of negotiated rates and context. Visible to all advisers — use as a guide only, verify before quoting.</p>'+
+    '<div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">'+
+      '<div class="card"><h2>Log a rate</h2>'+
+        '<div style="margin-bottom:12px"><label>Your name</label><input id="rl-adviser" placeholder="e.g. Paige"></div>'+
+        '<div style="margin-bottom:12px"><label>Bank</label><select id="rl-bank">'+bankOpts+'</select></div>'+
+        '<div style="margin-bottom:12px"><label>Term</label><select id="rl-term">'+termOpts+'</select></div>'+
+        '<div style="margin-bottom:12px"><label>Rate (% p.a.)</label><input type="number" id="rl-rate" placeholder="e.g. 4.35" step="0.01"></div>'+
+        '<div style="margin-bottom:16px"><label>Context / client position</label><textarea id="rl-note" style="min-height:80px;resize:vertical" placeholder="e.g. $900k lending, clean credit, salaried income. Rate valid 29 Apr 2026."></textarea></div>'+
+        '<button class="btn btn-p" style="width:100%;padding:10px" onclick="submitNegotiatedRate()">Add to log</button>'+
+      '</div>'+
+      '<div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">'+
+          '<button class="lvr-tab'+(rateLogFilter==='active'?' active':'')+'" onclick="setRateLogFilter(\'active\')">Active only</button>'+
+          '<button class="lvr-tab'+(rateLogFilter==='all'?' active':'')+'" onclick="setRateLogFilter(\'all\')">Show all</button>'+
+          '<button class="btn btn-sm" style="margin-left:auto" onclick="refreshRateLog()">&#8635; Refresh</button>'+
+        '</div>'+
+        '<div id="rl-entries"><div class="card" style="text-align:center;padding:32px;color:var(--hint)">Loading...</div></div>'+
+      '</div>'+
+    '</div>';
+
+  loadRateLogEntries();
+}
+
+function loadRateLogEntries(){
+  google.script.run
+    .withSuccessHandler(function(j){
+      try{
+        rateLogEntries=JSON.parse(j);
+        renderRateLogEntries();
+      }catch(e){ document.getElementById('rl-entries').innerHTML='<div class="card" style="text-align:center;padding:32px;color:var(--hint)">Could not load log entries.</div>'; }
+    })
+    .withFailureHandler(function(){
+      document.getElementById('rl-entries').innerHTML='<div class="card" style="text-align:center;padding:32px;color:var(--hint)">Failed to load. Check setup.</div>';
+    })
+    .getNegotiatedRates();
+}
+
+function refreshRateLog(){ loadRateLogEntries(); }
+
+function setRateLogFilter(f){ rateLogFilter=f; renderRateLogEntries(); }
+
+function daysAgo(id){
+  var ms=parseInt(id)||0; if(!ms) return null;
+  return Math.floor((Date.now()-ms)/(1000*60*60*24));
+}
+
+function renderRateLogEntries(){
+  var el=document.getElementById('rl-entries'); if(!el) return;
+  var filtered=rateLogEntries.filter(function(e){
+    if(rateLogFilter==='active') return e.status!=='stale';
+    return true;
+  });
+
+  // Update filter tabs
+  document.querySelectorAll('#tab-ratelog .lvr-tab').forEach(function(btn){
+    var m=btn.getAttribute('onclick').match(/'(\w+)'/);
+    if(!m) return;
+    btn.className='lvr-tab'+(rateLogFilter===m[1]?' active':'');
+  });
+
+  if(!filtered.length){
+    el.innerHTML='<div class="card" style="text-align:center;padding:32px;color:var(--hint)">'+(rateLogEntries.length?'No active entries. Switch to "Show all" to see stale records.':'No entries yet. Be the first to log a negotiated rate above.')+'</div>';
+    return;
+  }
+
+  var rows=filtered.map(function(e){
+    var days=daysAgo(e.id);
+    var isStale=e.status==='stale';
+    var age=days===null?e.date:days===0?'Today':days===1?'Yesterday':days+' days ago';
+    var ageBg=isStale?'var(--muted)':days===null?'var(--muted)':days<7?'var(--success)':days<30?'var(--warning)':'var(--danger)';
+    var rowOpacity=isStale?'opacity:.5;':'';
+    var bankColor=COLORS[e.bank]||'#555';
+    return '<tr style="'+rowOpacity+'">'+
+      '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+bankColor+';margin-right:6px;vertical-align:middle"></span>'+(e.bank==='CoOp'?'Co-op':e.bank)+'</td>'+
+      '<td style="font-family:var(--mono)">'+e.term+'</td>'+
+      '<td><span class="best" style="font-size:14px">'+parseFloat(e.rate).toFixed(2)+'%</span></td>'+
+      '<td style="font-size:12px;color:var(--muted);max-width:260px">'+escHtml(e.note)+'</td>'+
+      '<td style="font-size:12px">'+escHtml(e.adviser)+'</td>'+
+      '<td><span style="font-size:11px;font-weight:600;color:'+ageBg+'">'+age+'</span></td>'+
+      '<td>'+
+        (isStale
+          ?'<span style="font-size:11px;color:var(--muted);font-style:italic">Stale</span>'
+          :'<button class="btn btn-sm" onclick="markStale(\''+e.id+'\')" style="font-size:11px;padding:3px 8px;color:var(--warning);border-color:var(--warning-bd)">Mark stale</button>'
+        )+
+      '</td>'+
+    '</tr>';
+  }).join('');
+
+  el.innerHTML='<div class="card" style="padding:0;overflow:hidden">'+
+    '<div style="overflow-x:auto"><table>'+
+    '<thead><tr>'+
+      '<th>Bank</th><th>Term</th><th>Rate</th><th>Context</th><th>Added by</th><th>Age</th><th></th>'+
+    '</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+    '</table></div>'+
+    '<div style="padding:10px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">'+
+      '&#9679; Green = logged within 7 days &nbsp;&nbsp;&#9679; Amber = 7–30 days &nbsp;&nbsp;&#9679; Red = over 30 days — verify before using'+
+    '</div>'+
+  '</div>';
+}
+
+function submitNegotiatedRate(){
+  var adviser=(document.getElementById('rl-adviser')||{}).value||'';
+  var bank=(document.getElementById('rl-bank')||{}).value||'';
+  var term=(document.getElementById('rl-term')||{}).value||'';
+  var rate=parseFloat((document.getElementById('rl-rate')||{}).value)||0;
+  var note=(document.getElementById('rl-note')||{}).value||'';
+  if(!adviser){toast('Please enter your name','d');return;}
+  if(!rate){toast('Please enter a rate','d');return;}
+  if(!note){toast('Please add some context about the client position','d');return;}
+  var entry={adviser:adviser,bank:bank,term:term,rate:rate,note:note};
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      var r=JSON.parse(j);
+      if(r.success){
+        toast('Rate logged');
+        // Clear rate/note but keep adviser name for quick re-entry
+        var ri=document.getElementById('rl-rate'); if(ri) ri.value='';
+        var ni=document.getElementById('rl-note'); if(ni) ni.value='';
+        loadRateLogEntries();
+      } else {
+        toast('Failed to save: '+(r.error||'unknown'),'d');
+      }
+      load(false);
+    })
+    .withFailureHandler(function(){toast('Failed to save','d');load(false);})
+    .addNegotiatedRate(JSON.stringify(entry));
+}
+
+function markStale(id){
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      var r=JSON.parse(j);
+      if(r.success){
+        // Update locally without a full reload
+        rateLogEntries.forEach(function(e){ if(e.id===id) e.status='stale'; });
+        renderRateLogEntries();
+        toast('Marked as stale');
+      } else {
+        toast('Could not update entry','d');
+      }
+      load(false);
+    })
+    .withFailureHandler(function(){toast('Update failed','d');load(false);})
+    .updateNegotiatedRateStatus(id,'stale');
+}
+
+// ============================================================
+// CALCULATOR
+// ============================================================
+function buildAmortSchedule(principal,annualRate,termYears,freq){
+  var res=calcPayment(principal,annualRate,termYears,freq);
+  var payment=res.payment, r=res.r, ppy=res.ppy;
+  var balance=principal, totalInterest=0, years=[];
+  for(var yr=1;yr<=termYears;yr++){
+    var yrP=0,yrI=0,months=[];
+    for(var p=0;p<ppy;p++){
+      var interest=balance*r, prin=Math.min(payment-interest,balance);
+      balance=Math.max(0,balance-prin); yrP+=prin; yrI+=interest; totalInterest+=interest;
+      months.push({interest:interest,principal:prin,balance:balance});
+    }
+    years.push({year:yr,principal:yrP,interest:yrI,balance:balance,months:months});
+    if(balance<=0.01) break;
+  }
+  return {years:years,payment:payment,totalInterest:totalInterest,totalPaid:principal+totalInterest};
+}
+
+// Year-by-year balance trajectory when paying extra each period.
+// Tracks payoffYear (fractional) so the chart can plot the exact
+// crossover point instead of jumping from year-end to year-end.
+function buildAmortScheduleWithExtra(principal,annualRate,termYears,freq,extra){
+  var ppy=freq==='Weekly'?52:freq==='Fortnightly'?26:12;
+  var r=(annualRate/100)/ppy;
+  var basePayment=calcPayment(principal,annualRate,termYears,freq).payment;
+  var newPayment=basePayment+(extra||0);
+  var balance=principal, totalInterest=0, years=[], payoffYear=null;
+  for(var yr=1; yr<=termYears*2 && balance>0.01; yr++){
+    var yrP=0, yrI=0;
+    for(var p=0;p<ppy && balance>0.01;p++){
+      var interest=balance*r;
+      var prin=Math.min(newPayment-interest, balance);
+      if(prin<=0) break;
+      balance=Math.max(0, balance-prin);
+      yrP+=prin; yrI+=interest; totalInterest+=interest;
+      if (balance<=0.01) payoffYear = (yr-1) + (p+1)/ppy;
+    }
+    years.push({year:yr,principal:yrP,interest:yrI,balance:balance});
+    if(balance<=0.01) break;
+  }
+  return {years:years, totalInterest:totalInterest, payment:newPayment, payoffYear:payoffYear};
+}
+
+// Compact axis label.
+function _fmtAxis(v){
+  if(v>=1000000) return '$'+(v/1000000).toFixed(v>=10000000?0:1)+'m';
+  if(v>=1000)    return '$'+Math.round(v/1000)+'k';
+  return '$'+Math.round(v);
+}
+
+// Inline-SVG line chart. Datasets: [{label,color,points:[{x,y},...]}].
+function drawBalanceChart(datasets, opts){
+  opts = opts || {};
+  var w = 720, h = 260;
+  var pad = { top: 20, right: 16, bottom: 38, left: 64 };
+  var maxX = 0, maxY = 0;
+  datasets.forEach(function(ds){
+    (ds.points||[]).forEach(function(p){
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    });
+  });
+  if (!maxX || !maxY) {
+    return '<div style="text-align:center;padding:32px;color:var(--hint);font-size:13px">Enter loan details to see the balance chart.</div>';
+  }
+  var iw = w - pad.left - pad.right;
+  var ih = h - pad.top - pad.bottom;
+  function sx(x){ return pad.left + (x/maxX)*iw; }
+  function sy(y){ return pad.top + (1 - y/maxY)*ih; }
+
+  var ticks = '';
+  for (var i = 0; i <= 4; i++){
+    var v = maxY * (1 - i/4);
+    var yPos = pad.top + (i/4)*ih;
+    ticks += '<line x1="'+pad.left+'" y1="'+yPos+'" x2="'+(w-pad.right)+'" y2="'+yPos+'" stroke="#e5e7eb" stroke-width="1"/>';
+    ticks += '<text x="'+(pad.left-8)+'" y="'+(yPos+4)+'" font-size="10" fill="#6b7280" text-anchor="end" font-family="monospace">'+_fmtAxis(v)+'</text>';
+  }
+  var xLabels = '';
+  var step = Math.max(1, Math.round(maxX/6));
+  for (var x = 0; x <= maxX; x += step){
+    xLabels += '<text x="'+sx(x)+'" y="'+(h-pad.bottom+18)+'" font-size="10" fill="#6b7280" text-anchor="middle">'+x+'y</text>';
+  }
+  xLabels += '<text x="'+sx(maxX)+'" y="'+(h-pad.bottom+18)+'" font-size="10" fill="#6b7280" text-anchor="middle">'+maxX+'y</text>';
+
+  var lines = datasets.map(function(ds){
+    if (!ds.points || !ds.points.length) return '';
+    var d = ds.points.map(function(p, i){ return (i ? 'L' : 'M') + sx(p.x).toFixed(1) + ' ' + sy(p.y).toFixed(1); }).join(' ');
+    return '<path d="'+d+'" fill="none" stroke="'+ds.color+'" stroke-width="2.2" stroke-linejoin="round"/>';
+  }).join('');
+
+  var legend = datasets.filter(function(ds){ return ds.points && ds.points.length; }).map(function(ds, i){
+    var x0 = pad.left + i * 200;
+    return '<g transform="translate('+x0+', '+(pad.top-8)+')">'+
+      '<line x1="0" y1="0" x2="20" y2="0" stroke="'+ds.color+'" stroke-width="2.2"/>'+
+      '<text x="26" y="3" font-size="11" fill="#374151">'+ds.label+'</text>'+
+      '</g>';
+  }).join('');
+
+  return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;">'+
+    ticks + xLabels + lines + legend +
+  '</svg>';
+}
+
+// Build dataset array, using payoffYear for precise endpoint when extras
+// pay the loan off mid-year (otherwise the line cliff-drops at year-end).
+function _balanceDatasets(inp, sched, extraSched, color){
+  color = color || '#1D4ED8';
+  function pointsFromSched(s, principal){
+    var pts = [{x:0, y:principal}];
+    var n = s.years.length;
+    for (var i=0; i<n; i++) {
+      var yr = s.years[i];
+      if (i === n-1 && yr.balance < 0.01 && s.payoffYear) {
+        pts.push({x: s.payoffYear, y: 0});
+      } else {
+        pts.push({x: yr.year, y: yr.balance});
+      }
+    }
+    return pts;
+  }
+  var sets = [{
+    label: 'Standard repayments',
+    color: color,
+    points: pointsFromSched(sched, inp.amount)
+  }];
+  if (extraSched && extraSched.years && extraSched.years.length) {
+    sets.push({
+      label: 'With extra repayments',
+      color: '#059669',
+      points: pointsFromSched(extraSched, inp.amount)
+    });
+  }
+  return sets;
+}
+
+// Rasterise an SVG string to PNG (base64) via canvas. Apps Script's
+// HTML-to-PDF doesn't render inline SVG reliably, so we send a PNG
+// the server can embed via <img src="data:image/png;base64,...">.
+function _svgToPng(svgString, scale){
+  scale = scale || 2;
+  return new Promise(function(resolve, reject){
+    try {
+      var vb = svgString.match(/viewBox="0 0 (\d+) (\d+)"/);
+      var w = vb ? parseInt(vb[1]) : 720;
+      var h = vb ? parseInt(vb[2]) : 260;
+      var svg = svgString
+        .replace(/width="[^"]*"/, 'width="'+w+'"')
+        .replace(/height="[^"]*"/, 'height="'+h+'"');
+      if (svg.indexOf('xmlns=') === -1) svg = svg.replace(/<svg /i, '<svg xmlns="http://www.w3.org/2000/svg" ');
+      var blob = new Blob([svg], {type:'image/svg+xml;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function(){
+        var canvas = document.createElement('canvas');
+        canvas.width = w * scale;
+        canvas.height = h * scale;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        try { resolve(canvas.toDataURL('image/png').split(',')[1]); }
+        catch(err){ reject(err); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
+      img.src = url;
+    } catch(e){ reject(e); }
+  });
+}
+
+// Builds either the single-table click-to-expand schedule (no extras)
+// or a side-by-side standard-vs-extras comparison schedule.
+function _buildScheduleCardHtml(sid, inp, sched, extraSched, extra){
+  if (!extraSched || !extra) {
+    var rows = sched.years.map(function(y){
+      var isExp = expandedYears[sid] && expandedYears[sid][y.year];
+      var yr = '<tr class="amort-row" onclick="toggleYear(\''+sid+'\','+y.year+')">' +
+        '<td style="font-weight:500">Year '+y.year+' <span style="font-size:10px;color:var(--hint)">'+(isExp?'v':'>')+'</span></td>'+
+        '<td>'+nzd(y.principal)+'</td><td style="color:var(--danger)">'+nzd(y.interest)+'</td><td>'+nzd(y.balance)+'</td></tr>';
+      var subs = '';
+      if (isExp) {
+        var fl = inp.freq==='Weekly'?'Wk':inp.freq==='Fortnightly'?'Fn':'Mo';
+        subs = y.months.map(function(m, i){ return '<tr class="amort-sub"><td style="padding-left:28px">'+fl+' '+(i+1)+'</td><td>'+nzd(m.principal)+'</td><td style="color:var(--danger)">'+nzd(m.interest)+'</td><td>'+nzd(m.balance)+'</td></tr>'; }).join('');
+      }
+      return yr + subs;
+    }).join('');
+    return '<div class="card"><h2>Amortization schedule <span style="font-size:12px;font-weight:400;color:var(--muted)">(click a year to expand)</span></h2><div style="overflow-x:auto"><table><thead><tr><th>Period</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  }
+  function tableFor(years, label, color){
+    var rs = years.map(function(y){
+      return '<tr><td style="font-weight:500">Year '+y.year+'</td><td>'+nzd(y.principal)+'</td><td style="color:var(--danger)">'+nzd(y.interest)+'</td><td>'+nzd(y.balance)+'</td></tr>';
+    }).join('');
+    return '<div><div style="font-size:12px;font-weight:600;color:'+color+';text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">'+label+'</div><div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Period</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead><tbody>'+rs+'</tbody></table></div></div>';
+  }
+  var freqLow = (inp.freq||'Monthly').toLowerCase();
+  return '<div class="card"><h2>Amortization schedule</h2>'+
+    '<p style="font-size:12px;color:var(--muted);margin:-4px 0 14px">Side-by-side: standard repayments vs adding +'+nzd(extra)+' per '+freqLow+'.</p>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+      tableFor(sched.years, 'Standard', '#1D4ED8')+
+      tableFor(extraSched.years, 'With +'+nzd(extra), '#059669')+
+    '</div></div>';
+}
+
+function calcExtraRepayment(principal,annualRate,termYears,freq,extra){
+  var ppy=freq==='Weekly'?52:freq==='Fortnightly'?26:12;
+  var r=(annualRate/100)/ppy;
+  var basePayment=calcPayment(principal,annualRate,termYears,freq).payment;
+  var newPayment=basePayment+extra, balance=principal, totalInterest=0, periods=0;
+  while(balance>0.01&&periods<termYears*ppy*2){
+    var interest=balance*r, prin=Math.min(newPayment-interest,balance);
+    if(prin<=0) break;
+    balance=Math.max(0,balance-prin); totalInterest+=interest; periods++;
+  }
+  var newTermYears=periods/ppy;
+  return {newTermYears:newTermYears,yearsReduced:termYears-newTermYears,interestSaved:calcPayment(principal,annualRate,termYears,freq).payment*termYears*ppy-principal-totalInterest};
+}
+
+function updateExtraRepay(sid){
+  var inp=getInputs(sid); if(!inp.amount||!inp.rate) return;
+  var extra=parseFloat((document.getElementById('extra-amt-'+sid)||{}).value)||0;
+  var sl=document.getElementById('extra-slider-'+sid); if(sl) sl.value=Math.min(extra,parseFloat(sl.max)||extra);
+  var resEl=document.getElementById('extra-result-'+sid);
+  var chartEl=document.getElementById('chart-'+sid);
+  var schedEl=document.getElementById('schedule-'+sid);
+  var sched=buildAmortSchedule(inp.amount,inp.rate,inp.termYears,inp.freq);
+  var extraSched = extra > 0 ? buildAmortScheduleWithExtra(inp.amount,inp.rate,inp.termYears,inp.freq,extra) : null;
+  // Chart updates live so the green overlay slides in as the slider moves.
+  if (chartEl) chartEl.innerHTML = drawBalanceChart(_balanceDatasets(inp, sched, extraSched, '#1D4ED8'));
+  // Schedule swaps to side-by-side comparison when extras > 0, back to single
+  // click-to-expand table when extras is cleared.
+  if (schedEl) schedEl.innerHTML = _buildScheduleCardHtml(sid, inp, sched, extraSched, extra);
+  if(!resEl) return;
+  if(extra<=0){resEl.innerHTML='<span style="color:var(--muted);font-size:13px">Enter an amount above to see savings.</span>';return;}
+  var r=calcExtraRepayment(inp.amount,inp.rate,inp.termYears,inp.freq,extra);
+  var yrs=Math.floor(r.yearsReduced), mos=Math.round((r.yearsReduced-yrs)*12);
+  var timeStr=yrs>0&&mos>0?yrs+'yr '+mos+'mo':yrs>0?yrs+' year'+(yrs!==1?'s':''):mos+' month'+(mos!==1?'s':'');
+  var nty=Math.floor(r.newTermYears), ntm=Math.round((r.newTermYears-nty)*12);
+  resEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">'+
+    '<div style="background:var(--success-bg);border:1px solid var(--success-bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--success);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Time saved</div><div style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--success)">'+timeStr+'</div></div>'+
+    '<div style="background:var(--success-bg);border:1px solid var(--success-bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--success);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Interest saved</div><div style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--success)">'+nzd(r.interestSaved)+'</div></div>'+
+    '<div style="background:var(--accent-bg);border:1px solid #BFDBFE;border-radius:8px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">New loan term</div><div style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--accent)">'+nty+'yr '+ntm+'mo</div></div>'+
+  '</div>';
+}
+
+function renderCalc(){
+  var el=document.getElementById('tab-calc');
+  var bankOpts='<option value="">Select bank...</option>';
+  BANKS_ORDER.forEach(function(id){var b=banks[id];if(b&&!b.isPending)bankOpts+='<option value="'+id+'">'+(id==='CoOp'?'Co-op':id)+'</option>';});
+  var calcBandSelector='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);font-weight:500;margin-right:4px">LVR band:</span>'+LVR_BANDS.map(function(b){return '<button class="lvr-tab'+(b.id!=='le80'?' high':'')+(calcLVRBand===b.id?' active':'')+'" onclick="setCalcLVRBand(\''+b.id+'\')">'+b.label+'</button>';}).join('')+'</div>';
+  var compareTarget=calcMode==='compare'?'<div style="display:flex;align-items:center;gap:8px"><label style="text-transform:none;letter-spacing:0;font-weight:400;font-size:13px;color:var(--muted);margin:0">Apply to:</label><select id="qs-target" style="width:auto;padding:6px 10px"><option value="A">Scenario A</option><option value="B">Scenario B</option></select></div>':'';
+  el.innerHTML=
+    '<h1>Repayment calculator</h1><p class="sub">Calculate repayments and view a full amortization schedule</p>'+
+    '<div style="display:flex;gap:8px;margin-bottom:24px"><button class="mode-tab'+(calcMode==='single'?' active':'')+'" onclick="switchCalcMode(\'single\',this)">Single scenario</button><button class="mode-tab'+(calcMode==='compare'?' active':'')+'" onclick="switchCalcMode(\'compare\',this)">Compare two rates</button></div>'+
+    '<div class="card" style="margin-bottom:16px"><h2 style="margin-bottom:14px">Load a rate from the dashboard</h2>'+
+      calcBandSelector+
+      '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin:12px 0 10px"><div><label>Bank</label><select id="qs-bank" onchange="updateQsTerms()">'+bankOpts+'</select></div><div><label>Term</label><select id="qs-term" onchange="updateQsPreview()"><option value="">Select bank first...</option></select></div><button class="btn btn-p" onclick="applyQuickRate()" style="white-space:nowrap">Use this rate</button></div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;min-height:24px"><div id="qs-preview" style="font-size:13px;color:var(--muted)"></div>'+compareTarget+'</div>'+
+    '</div>'+
+    '<div id="calc-body"></div>';
+  renderCalcBody();
+}
+
+function setCalcLVRBand(band){
+  calcLVRBand=band;
+  document.querySelectorAll('#tab-calc .lvr-tab').forEach(function(btn){
+    var m=btn.getAttribute('onclick').match(/'(\w+)'/);
+    if(!m) return;
+    var bid=m[1];
+    btn.className='lvr-tab'+(bid!=='le80'?' high':'')+(calcLVRBand===bid?' active':'');
+  });
+  updateQsTerms();
+}
+
+function updateQsTerms(){
+  var bankId=document.getElementById('qs-bank').value;
+  var termSel=document.getElementById('qs-term');
+  var preview=document.getElementById('qs-preview'); if(preview) preview.textContent='';
+  if(!bankId||!banks[bankId]){termSel.innerHTML='<option value="">Select bank first...</option>';return;}
+  var opts='<option value="">Select term...</option>';
+  (banks[bankId].fixedRates||[]).forEach(function(r){
+    var rate=getRateForBand(banks[bankId],r.term,calcLVRBand);
+    if(rate&&rate>0) opts+='<option value="'+rate+'">'+r.term+' - '+rate.toFixed(2)+'% ('+getBandLabel(calcLVRBand)+')</option>';
+  });
+  termSel.innerHTML=opts;
+}
+
+function updateQsPreview(){
+  var bankId=document.getElementById('qs-bank').value;
+  var termEl=document.getElementById('qs-term');
+  var preview=document.getElementById('qs-preview'); if(!preview) return;
+  if(!bankId||!termEl||!termEl.value){preview.textContent='';return;}
+  preview.innerHTML='<span style="color:var(--accent);font-weight:500">'+(NAMES[bankId]||bankId)+'</span> -- '+termEl.options[termEl.selectedIndex].text;
+}
+
+function applyQuickRate(){
+  var termEl=document.getElementById('qs-term');
+  if(!termEl||!termEl.value){toast('Select a bank and term first','d');return;}
+  var rate=parseFloat(termEl.value);
+  var targetEl=document.getElementById('qs-target');
+  useRate(rate,targetEl?targetEl.value:'A');
+  toast('Rate loaded'+(calcMode==='compare'?' into Scenario '+(targetEl?targetEl.value:'A'):''));
+}
+
+function switchCalcMode(mode,btn){
+  calcMode=mode; expandedYears={A:{},B:{}};
+  document.querySelectorAll('.mode-tab').forEach(function(b){b.classList.remove('active');});
+  if(btn) btn.classList.add('active');
+  renderCalc();
+}
+
+function calcInputPanel(sid,title){
+  return '<div class="card"><h2>'+title+'</h2>'+
+    '<div style="margin-bottom:14px"><label>Loan amount ($)</label><input type="number" id="c-amount-'+sid+'" placeholder="e.g. 650000" oninput="calcUpdate()"></div>'+
+    '<div style="margin-bottom:14px"><label>Interest rate (% p.a.)</label><input type="number" id="c-rate-'+sid+'" placeholder="e.g. 4.49" step="0.01" oninput="calcUpdate()"></div>'+
+    '<div style="margin-bottom:14px"><label>Loan term (years)</label><input type="number" id="c-term-'+sid+'" value="30" oninput="calcUpdate()"></div>'+
+    '<div><label>Repayment frequency</label><select id="c-freq-'+sid+'" onchange="calcUpdate()"><option>Monthly</option><option>Fortnightly</option><option>Weekly</option></select></div></div>';
+}
+
+function renderCalcBody(){
+  var el=document.getElementById('calc-body'); if(!el) return;
+  if(calcMode==='single'){
+    el.innerHTML='<div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">'+calcInputPanel('A','Loan details')+'<div id="calc-results-A"><div class="card" style="text-align:center;padding:40px;color:var(--hint)">Enter loan details to see results.</div></div></div>';
+  } else {
+    el.innerHTML='<div style="display:grid;grid-template-columns:240px 240px 1fr;gap:16px;align-items:start">'+calcInputPanel('A','Scenario A')+calcInputPanel('B','Scenario B')+'<div id="calc-compare-results"><div class="card" style="text-align:center;padding:40px;color:var(--hint)">Enter details for both scenarios.</div></div></div>';
+  }
+}
+
+function useRate(rate,sid){var el=document.getElementById('c-rate-'+(sid||'A'));if(el){el.value=rate;calcUpdate();}}
+
+function getInputs(sid){
+  return {
+    amount:parseFloat((document.getElementById('c-amount-'+sid)||{}).value)||0,
+    rate:parseFloat((document.getElementById('c-rate-'+sid)||{}).value)||0,
+    termYears:parseFloat((document.getElementById('c-term-'+sid)||{}).value)||30,
+    freq:((document.getElementById('c-freq-'+sid)||{}).value)||'Monthly'
+  };
+}
+
+function calcUpdate(){
+  if(calcMode==='single'){
+    var inp=getInputs('A'); var el=document.getElementById('calc-results-A'); if(!el) return;
+    if(!inp.amount||!inp.rate){el.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--hint)">Enter loan details to see results.</div>';return;}
+    el.innerHTML=renderSingleResults('A',inp,buildAmortSchedule(inp.amount,inp.rate,inp.termYears,inp.freq));
+  } else {
+    var inpA=getInputs('A'), inpB=getInputs('B'); var el2=document.getElementById('calc-compare-results'); if(!el2) return;
+    if((!inpA.amount||!inpA.rate)&&(!inpB.amount||!inpB.rate)){el2.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--hint)">Enter details for both scenarios.</div>';return;}
+    el2.innerHTML=renderCompareResults(inpA,inpA.amount&&inpA.rate?buildAmortSchedule(inpA.amount,inpA.rate,inpA.termYears,inpA.freq):null,inpB,inpB.amount&&inpB.rate?buildAmortSchedule(inpB.amount,inpB.rate,inpB.termYears,inpB.freq):null);
+  }
+}
+
+function renderSingleResults(sid,inp,sched){
+  var weekly=calcPayment(inp.amount,inp.rate,inp.termYears,'Weekly').payment;
+  var fortnightly=calcPayment(inp.amount,inp.rate,inp.termYears,'Fortnightly').payment;
+  var monthly=calcPayment(inp.amount,inp.rate,inp.termYears,'Monthly').payment;
+  var pp=Math.round((inp.amount/sched.totalPaid)*100), ip=100-pp;
+  var freqLabel=inp.freq.toLowerCase();
+  var sliderMax=Math.round(inp.freq==='Weekly'?weekly*0.5:inp.freq==='Fortnightly'?fortnightly*0.5:monthly*0.5);
+
+  var summary='<div class="card"><h2>Summary</h2>'+
+    '<div class="freq-grid"><div class="freq-card'+(inp.freq==='Weekly'?' active':'')+'"><div class="freq-amount">'+nzd(weekly)+'</div><div class="freq-label">Weekly</div></div><div class="freq-card'+(inp.freq==='Fortnightly'?' active':'')+'"><div class="freq-amount">'+nzd(fortnightly)+'</div><div class="freq-label">Fortnightly</div></div><div class="freq-card'+(inp.freq==='Monthly'?' active':'')+'"><div class="freq-amount">'+nzd(monthly)+'</div><div class="freq-label">Monthly</div></div></div>'+
+    '<div class="sum-row"><span class="sum-label">Loan amount</span><span class="sum-val">'+nzd(inp.amount)+'</span></div>'+
+    '<div class="sum-row"><span class="sum-label">Interest rate</span><span class="sum-val">'+inp.rate.toFixed(2)+'% p.a.</span></div>'+
+    '<div class="sum-row"><span class="sum-label">Loan term</span><span class="sum-val">'+inp.termYears+' years</span></div>'+
+    '<div class="sum-row"><span class="sum-label">Total interest</span><span class="sum-val" style="color:var(--danger)">'+nzd(sched.totalInterest)+'</span></div>'+
+    '<div class="sum-row"><span class="sum-label">Total repaid</span><span class="sum-val">'+nzd(sched.totalPaid)+'</span></div>'+
+    '<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>Principal '+pp+'%</span><span>Interest '+ip+'%</span></div><div class="bar-wrap"><div class="bar-p" style="width:'+pp+'%"></div><div class="bar-i" style="width:'+ip+'%"></div></div></div></div>';
+
+  var extraRepay='<div class="card"><h2>Extra repayment calculator</h2>'+
+    '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">See how much interest and time you save by paying more than the minimum each '+freqLabel+'.</p>'+
+    '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:14px"><div><label>Extra per '+freqLabel+' ($)</label><input type="number" id="extra-amt-'+sid+'" placeholder="e.g. 200" min="0" step="50" oninput="updateExtraRepay(\''+sid+'\')"></div><div style="padding-bottom:2px"><label style="margin-bottom:6px">Adjust</label><input type="range" id="extra-slider-'+sid+'" min="0" max="'+sliderMax+'" step="50" value="0" oninput="document.getElementById(\'extra-amt-'+sid+'\').value=this.value;updateExtraRepay(\''+sid+'\')" style="width:180px;display:block"></div></div>'+
+    '<div id="extra-result-'+sid+'"><span style="color:var(--muted);font-size:13px">Enter an amount above to see savings.</span></div></div>';
+
+  // Balance-over-time chart with PDF download. updateExtraRepay rebuilds
+  // both the chart and the schedule live as the extra-repayment input changes.
+  var initialDatasets = _balanceDatasets(inp, sched, null, '#1D4ED8');
+  var chartCard = '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Balance over time</h2>'+
+    '<button class="btn btn-sm" onclick="downloadCalcPdf(\''+sid+'\')" id="pdf-btn-'+sid+'">&#8595; Download PDF</button>'+
+    '</div><div id="chart-'+sid+'">'+drawBalanceChart(initialDatasets)+'</div></div>';
+
+  var scheduleCard = '<div id="schedule-'+sid+'">'+_buildScheduleCardHtml(sid, inp, sched, null, 0)+'</div>';
+  return summary+extraRepay+chartCard+scheduleCard;
+}
+
+function renderCompareResults(inpA,sA,inpB,sB){
+  function col(label,inp,sched,color){
+    if(!sched) return '<div class="card" style="opacity:.5;text-align:center;padding:24px;color:var(--muted)">Enter '+label+' details</div>';
+    var w=calcPayment(inp.amount,inp.rate,inp.termYears,'Weekly').payment;
+    var f=calcPayment(inp.amount,inp.rate,inp.termYears,'Fortnightly').payment;
+    var m=calcPayment(inp.amount,inp.rate,inp.termYears,'Monthly').payment;
+    return '<div class="card" style="border-top:3px solid '+color+'"><h2 style="color:'+color+'">'+label+'</h2><div style="font-size:12px;color:var(--muted);margin-bottom:12px">'+nzd(inp.amount)+' at '+inp.rate.toFixed(2)+'% over '+inp.termYears+'yr</div><div class="sum-row"><span class="sum-label">Weekly</span><span class="sum-val">'+nzd(w)+'</span></div><div class="sum-row"><span class="sum-label">Fortnightly</span><span class="sum-val">'+nzd(f)+'</span></div><div class="sum-row"><span class="sum-label">Monthly</span><span class="sum-val">'+nzd(m)+'</span></div><div class="sum-row"><span class="sum-label">Total interest</span><span class="sum-val" style="color:var(--danger)">'+nzd(sched.totalInterest)+'</span></div><div class="sum-row"><span class="sum-label">Total repaid</span><span class="sum-val">'+nzd(sched.totalPaid)+'</span></div></div>';
+  }
+  var diff='';
+  if(sA&&sB){
+    var mA=calcPayment(inpA.amount,inpA.rate,inpA.termYears,'Monthly').payment;
+    var mB=calcPayment(inpB.amount,inpB.rate,inpB.termYears,'Monthly').payment;
+    diff='<div class="card" style="background:var(--success-bg);border-color:var(--success-bd);margin-top:0"><h2 style="color:var(--success)">Comparison</h2><div class="sum-row"><span class="sum-label">Monthly saving</span><span class="sum-val" style="color:var(--success)">'+nzd(Math.abs(mA-mB))+'/mo</span></div><div class="sum-row"><span class="sum-label">Total saving over term</span><span class="sum-val" style="color:var(--success)">'+nzd(Math.abs(sA.totalPaid-sB.totalPaid))+'</span></div><div class="sum-row"><span class="sum-label">Lower total cost</span><span class="sum-val" style="color:var(--success)">'+(sA.totalPaid<=sB.totalPaid?'Scenario A':'Scenario B')+'</span></div></div>';
+  }
+  // Dual-line balance chart so the lower-rate scenario is visible at a
+  // glance, plus a Download PDF button for the same data.
+  var chart = '';
+  if (sA && sB) {
+    var datasets = [
+      { label: 'Scenario A — '+inpA.rate.toFixed(2)+'%', color: '#1D4ED8', points: [{x:0,y:inpA.amount}].concat(sA.years.map(function(y){return {x:y.year,y:y.balance};})) },
+      { label: 'Scenario B — '+inpB.rate.toFixed(2)+'%', color: '#059669', points: [{x:0,y:inpB.amount}].concat(sB.years.map(function(y){return {x:y.year,y:y.balance};})) }
+    ];
+    chart = '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Balance over time</h2>'+
+      '<button class="btn btn-sm" onclick="downloadCalcPdf(\'compare\')" id="pdf-btn-compare">&#8595; Download PDF</button>'+
+      '</div>'+drawBalanceChart(datasets)+'</div>';
+  }
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'+col('Scenario A',inpA,sA,'#1D4ED8')+col('Scenario B',inpB,sB,'#059669')+'</div>'+diff+chart;
+}
+
+function toggleYear(sid,year){
+  if(!expandedYears[sid])expandedYears[sid]={};
+  expandedYears[sid][year]=!expandedYears[sid][year];
+  calcUpdate();
+}
+
+// Build the PDF payload, rasterise the on-screen chart to PNG, and
+// trigger a browser download via data URL once the server returns.
+var _pdfBusy=false;
+function downloadCalcPdf(target){
+  if (_pdfBusy) return;
+  var payload, datasets = null;
+  if (target === 'compare') {
+    var inpA=getInputs('A'), inpB=getInputs('B');
+    if ((!inpA.amount||!inpA.rate) && (!inpB.amount||!inpB.rate)) { toast('Enter loan details first','d'); return; }
+    var schedA = inpA.amount && inpA.rate ? buildAmortSchedule(inpA.amount,inpA.rate,inpA.termYears,inpA.freq) : null;
+    var schedB = inpB.amount && inpB.rate ? buildAmortSchedule(inpB.amount,inpB.rate,inpB.termYears,inpB.freq) : null;
+    payload = {
+      mode: 'compare',
+      A: schedA ? { input: inpA, schedule: schedA } : null,
+      B: schedB ? { input: inpB, schedule: schedB } : null
+    };
+    if (schedA && schedB) {
+      datasets = [
+        { label: 'Scenario A — '+inpA.rate.toFixed(2)+'%', color: '#1D4ED8', points: [{x:0,y:inpA.amount}].concat(schedA.years.map(function(y){return {x:y.year,y:y.balance};})) },
+        { label: 'Scenario B — '+inpB.rate.toFixed(2)+'%', color: '#059669', points: [{x:0,y:inpB.amount}].concat(schedB.years.map(function(y){return {x:y.year,y:y.balance};})) }
+      ];
+    }
+  } else {
+    var inp=getInputs(target||'A');
+    if (!inp.amount || !inp.rate) { toast('Enter loan details first','d'); return; }
+    var sched=buildAmortSchedule(inp.amount,inp.rate,inp.termYears,inp.freq);
+    var extra=parseFloat((document.getElementById('extra-amt-'+target)||{}).value)||0;
+    var extraSched = extra>0 ? buildAmortScheduleWithExtra(inp.amount,inp.rate,inp.termYears,inp.freq,extra) : null;
+    payload = { mode:'single', input: inp, schedule: sched, extra: extra, extraSchedule: extraSched };
+    datasets = _balanceDatasets(inp, sched, extraSched, '#1D4ED8');
+  }
+  _pdfBusy=true;
+  var btn=document.getElementById('pdf-btn-'+(target||'A')); if(btn){btn.disabled=true; btn.textContent='Generating…';}
+  load(true);
+
+  function sendRequest(){
+    google.script.run
+      .withSuccessHandler(function(j){
+        _pdfBusy=false; load(false);
+        if (btn){ btn.disabled=false; btn.innerHTML='&#8595; Download PDF'; }
+        var r; try { r = JSON.parse(j); } catch(e) { toast('PDF failed: bad response','d'); return; }
+        if (!r.success) { toast('PDF failed: '+(r.error||'unknown'),'d'); return; }
+        var link=document.createElement('a');
+        link.href='data:application/pdf;base64,'+r.base64;
+        link.download=r.filename || 'Repayment_Calculator.pdf';
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        toast('PDF downloaded');
+      })
+      .withFailureHandler(function(e){
+        _pdfBusy=false; load(false);
+        if (btn){ btn.disabled=false; btn.innerHTML='&#8595; Download PDF'; }
+        toast('PDF failed'+(e&&e.message?': '+e.message:''),'d');
+      })
+      .generateRepaymentPdf(JSON.stringify(payload));
+  }
+
+  if (datasets && datasets.length) {
+    var svg = drawBalanceChart(datasets);
+    _svgToPng(svg, 2).then(function(png){
+      payload.chartPng = png;
+      sendRequest();
+    }).catch(function(){
+      // Chart rasterise failed — proceed without the image.
+      sendRequest();
+    });
+  } else {
+    sendRequest();
+  }
+}
+
+function toast(msg,type){var el=document.getElementById('toast');el.textContent=msg;el.className=type==='d'?'show td':'show';clearTimeout(el._t);el._t=setTimeout(function(){el.className='';},3500);}
+function load(on){var el=document.getElementById('loader');if(el)el.className=on?'on':'';}
+</script>
+</body>
+</html>
