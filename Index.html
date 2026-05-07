@@ -77,6 +77,11 @@ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase
 .as{background:var(--success-bg);border:1px solid var(--success-bd);color:#065F46}
 .ai{background:var(--accent-bg);border:1px solid #BFDBFE;color:#1e3a8a}
 .pending-banner{background:var(--danger-bg);border:1px solid #FECACA;border-radius:10px;padding:20px;text-align:center;margin-bottom:16px}
+/* Movement chips for the bank-tab hero (rate-card delta indicator) */
+.mv-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-family:var(--mono);font-weight:600}
+.mv-up{background:rgba(239,68,68,0.16);color:#EF4444;border:1px solid rgba(239,68,68,0.45)}
+.mv-dn{background:var(--brand-green-glow);color:var(--brand-green-bright);border:1px solid rgba(31,168,74,0.45)}
+.mv-flat{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 .pending-banner h3{font-size:16px;font-weight:600;color:var(--danger);margin-bottom:6px}
 .pending-banner p{font-size:13px;color:#7F1D1D}
 .disc-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--warning-bg);border:1px solid var(--warning-bd);border-radius:8px;margin-bottom:18px}
@@ -183,6 +188,11 @@ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase
     <div id="tab-calc"     style="display:none"></div>
     <div id="tab-ratelog"  style="display:none"></div>
   </main>
+</div>
+
+<!-- Modal overlay (history + cross-bank compare). closeRdModal hides it. -->
+<div id="rd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto;" onclick="if(event.target===this)closeRdModal()">
+  <div id="rd-modal-content" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:760px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.4);"></div>
 </div>
 
 <script>
@@ -309,6 +319,8 @@ function go(tab){
   var t=document.getElementById('tab-'+tab); if(t)t.style.display='block';
   if(tab==='calc') renderCalc();
   if(tab==='ratelog') renderRateLog();
+  // Lazy-load rate-card history so sparklines paint after the tab opens.
+  if(banks[tab]) loadRateHistoryIfNeeded(tab);
 }
 
 function renderAll(){
@@ -422,13 +434,255 @@ function renderOverview(){
 // ============================================================
 // BANK TAB
 // ============================================================
+// Lazy-load rate-card history per bank — caches on banks[id]._history.
+// Triggers a re-render when fresh data arrives so sparklines paint.
+function loadRateHistoryIfNeeded(bankId){
+  var b=banks[bankId]; if(!b) return;
+  if(b._historyLoading) return;
+  if(b._history) return;
+  b._historyLoading=true;
+  google.script.run
+    .withSuccessHandler(function(j){
+      try {
+        var r=JSON.parse(j);
+        if(r.success){ banks[bankId]._history=r.snapshots||[]; renderBank(bankId); }
+      } catch(e){ console.error('history parse failed', e); }
+      banks[bankId]._historyLoading=false;
+    })
+    .withFailureHandler(function(){ banks[bankId]._historyLoading=false; })
+    .getRateHistory(bankId, 12);
+}
+
+// Tiny inline-SVG sparkline of disc rates for one term. Returns '' if <2 points.
+function sparklineSvg(history, term, color){
+  if(!history||!history.length) return '';
+  var points=[];
+  history.forEach(function(snap){
+    var r=snap.rates && snap.rates[term];
+    if(r && r.disc>0) points.push(r.disc);
+  });
+  if(points.length<2) return '';
+  var w=80, h=20, pad=2;
+  var min=Math.min.apply(null,points), max=Math.max.apply(null,points);
+  var range=Math.max(0.01, max-min);
+  var coords=points.map(function(v,i){
+    var x=pad+(i/(points.length-1))*(w-2*pad);
+    var y=h-pad-((v-min)/range)*(h-2*pad);
+    return x.toFixed(1)+','+y.toFixed(1);
+  });
+  var last=points[points.length-1], first=points[0];
+  var trendColor=last>first?'#EF4444':(last<first?(color||'#1FA84A'):'#94A3B8');
+  return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block;margin-top:6px;opacity:0.85;"><polyline fill="none" stroke="'+trendColor+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" points="'+coords.join(' ')+'"/></svg>';
+}
+
+// ── Modal helpers ──────────────────────────────────────────
+function openRdModal(html){
+  var ov=document.getElementById('rd-modal-overlay'), c=document.getElementById('rd-modal-content');
+  if(!ov||!c) return;
+  c.innerHTML=html;
+  ov.style.display='flex';
+  document.addEventListener('keydown',_rdModalKey);
+}
+function closeRdModal(){
+  var ov=document.getElementById('rd-modal-overlay');
+  if(ov) ov.style.display='none';
+  document.removeEventListener('keydown',_rdModalKey);
+}
+function _rdModalKey(e){ if(e.key==='Escape') closeRdModal(); }
+
+// Compare a term + LVR band across all banks. Modal keeps its own band
+// so you can flip between bands without leaving the modal.
+var _compareModalState = null;
+function openCompareModal(originBankId, term){
+  _compareModalState = { originBankId: originBankId, term: term, band: selectedLVRBand };
+  openRdModal(_compareModalHtml());
+}
+function _setCompareBand(band){
+  if(!_compareModalState) return;
+  _compareModalState.band = band;
+  var c = document.getElementById('rd-modal-content');
+  if(c) c.innerHTML = _compareModalHtml();
+}
+function _compareModalHtml(){
+  var st = _compareModalState; if(!st) return '';
+  var bandLabel = function(b){ return b==='le80'?'<=80% LVR':b==='b80_85'?'80-85% LVR':b==='b85_90'?'85-90% LVR':'90-95% LVR'; };
+  var lemAddFor=function(bb){
+    var lemB=bb.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50};
+    return st.band==='le80'?0:(lemB[st.band]||0);
+  };
+  var rows=[];
+  BANKS_ORDER.forEach(function(id){
+    var bb=banks[id]; if(!bb||bb.isPending) return;
+    var r=(bb.fixedRates||[]).find(function(x){return x && x.term===st.term;});
+    if(!r) return;
+    var disc=parseFloat(r.disc), adv=parseFloat(r.adv);
+    if(isNaN(disc)||disc<=0) return;
+    var eff=disc+lemAddFor(bb);
+    rows.push({id:id, name:NAMES[id]||id, eff:eff, adv:adv, color:COLORS[id]||'#1FA84A'});
+  });
+  rows.sort(function(a,b){return a.eff-b.eff;});
+
+  var bestEff=rows.length?rows[0].eff:null;
+  var worstEff=rows.length?rows[rows.length-1].eff:null;
+  var range=(worstEff!=null&&bestEff!=null&&worstEff>bestEff)?(worstEff-bestEff):0;
+
+  var bandTabs = LVR_BANDS.map(function(band){
+    var active = st.band === band.id;
+    var bg = active ? 'var(--accent-bg)' : 'transparent';
+    var col = active ? 'var(--brand-green-bright)' : 'var(--muted)';
+    var bd = active ? 'var(--brand-green)' : 'var(--border)';
+    return '<button onclick="_setCompareBand(\'' + band.id + '\')" style="background:' + bg + ';color:' + col + ';border:1px solid ' + bd + ';font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;cursor:pointer;">' + band.label + '</button>';
+  }).join('');
+
+  var html='<div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'+
+    '<div>'+
+      '<h2 style="margin:0;font-size:18px;color:var(--text);">'+st.term+' &middot; cross-bank comparison</h2>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px;">'+bandLabel(st.band)+' &middot; effective rates &middot; '+rows.length+' banks</div>'+
+    '</div>'+
+    '<button onclick="closeRdModal()" style="background:transparent;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close (Esc)">&times;</button>'+
+  '</div>'+
+  '<div style="padding:12px 24px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+
+    '<span style="font-size:11px;color:var(--muted);font-weight:500;margin-right:4px;">LVR band:</span>'+bandTabs+
+  '</div>';
+
+  if(!rows.length){
+    html+='<div style="padding:32px;text-align:center;color:var(--muted);">No banks have a '+st.term+' rate available at '+bandLabel(st.band)+'.</div>';
+  } else {
+    html+='<div style="padding:18px 24px 22px;">';
+    rows.forEach(function(r){
+      var isOrigin=r.id===st.originBankId;
+      var isBest=Math.abs(r.eff-bestEff)<0.001;
+      var deltaFromBest=r.eff-bestEff;
+      var pct=range>0?((r.eff-bestEff)/range)*100:0;
+      var barColor=isBest?'var(--brand-green)':(deltaFromBest<0.10?'#5AC787':(deltaFromBest<0.25?'#F59E0B':'#EF4444'));
+      html+='<div style="display:grid;grid-template-columns:120px 1fr 90px 70px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);'+(isOrigin?'background:var(--accent-bg);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:6px;':'')+'">'+
+        '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'+
+          '<span style="display:inline-block;width:8px;height:8px;border-radius:99px;background:'+r.color+';flex-shrink:0;"></span>'+
+          '<span style="font-size:13px;font-weight:'+(isOrigin?'700':'500')+';color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+r.name+'</span>'+
+        '</div>'+
+        '<div style="background:var(--bg);height:8px;border-radius:99px;position:relative;overflow:hidden;">'+
+          '<div style="position:absolute;left:0;top:0;height:100%;width:'+(100-pct)+'%;background:'+barColor+';border-radius:99px;transition:width 200ms;"></div>'+
+        '</div>'+
+        '<div style="font-family:var(--font);font-size:14px;font-weight:700;color:var(--text);text-align:right;">'+r.eff.toFixed(2)+'%</div>'+
+        '<div style="font-size:11px;text-align:right;'+(isBest?'color:var(--brand-green-bright);font-weight:700;':'color:var(--muted);')+'">'+(isBest?'BEST':'+'+deltaFromBest.toFixed(2))+'</div>'+
+      '</div>';
+    });
+    html+='</div>';
+    html+='<div style="padding:14px 24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);background:var(--bg);border-radius:0 0 14px 14px;">Highlighted row is the bank you came from. Toggle bands above to see how rankings shift across LVR.</div>';
+  }
+  return html;
+}
+
+// Per-term history modal — reverse chronological, with delta-from-previous.
+function openHistoryModal(bankId, term){
+  var b=banks[bankId]; if(!b) return;
+  var hist=b._history||[];
+  var rows=[];
+  hist.slice().reverse().forEach(function(snap){
+    var r=snap.rates && snap.rates[term];
+    if(!r) return;
+    var ts=snap.ts ? new Date(snap.ts) : null;
+    var dateStr=ts ? ts.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}) : (snap.lastUpdated||'unknown');
+    rows.push({date:dateStr, lastUpdated:snap.lastUpdated, adv:r.adv, disc:r.disc, highLVR:r.highLVR});
+  });
+
+  var html='<div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'+
+    '<div>'+
+      '<h2 style="margin:0;font-size:18px;color:var(--text);">'+(b.fullName||bankId)+' &middot; '+term+' history</h2>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px;">Recent rate-card snapshots for this term &middot; '+rows.length+' entries</div>'+
+    '</div>'+
+    '<button onclick="closeRdModal()" style="background:transparent;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close (Esc)">&times;</button>'+
+  '</div>';
+
+  if(!rows.length){
+    html+='<div style="padding:32px;text-align:center;color:var(--muted);">No history captured yet for '+term+'. History accumulates from the next rate-card update onward.</div>';
+  } else {
+    html+='<div style="padding:18px 24px 22px;">';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">'+
+      '<thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);">'+
+        '<th style="padding:8px 6px;font-weight:600;">Captured</th>'+
+        '<th style="padding:8px 6px;font-weight:600;">Card date</th>'+
+        '<th style="padding:8px 6px;font-weight:600;text-align:right;">Advertised</th>'+
+        '<th style="padding:8px 6px;font-weight:600;text-align:right;">Discretionary</th>'+
+        '<th style="padding:8px 6px;font-weight:600;text-align:right;">Carded &gt;80</th>'+
+      '</tr></thead><tbody>';
+    rows.forEach(function(r,i){
+      var prevDisc=i<rows.length-1?rows[i+1].disc:null;
+      var deltaHtml='';
+      if(prevDisc!=null && r.disc>0 && prevDisc>0){
+        var dlt=+(r.disc-prevDisc).toFixed(2);
+        if(dlt>0) deltaHtml=' <span style="color:#EF4444;font-size:10px;">&#9650;'+dlt.toFixed(2)+'</span>';
+        else if(dlt<0) deltaHtml=' <span style="color:var(--brand-green-bright);font-size:10px;">&#9660;'+Math.abs(dlt).toFixed(2)+'</span>';
+      }
+      html+='<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:9px 6px;color:var(--text);">'+r.date+'</td>'+
+        '<td style="padding:9px 6px;color:var(--muted);font-size:12px;">'+(r.lastUpdated||'-')+'</td>'+
+        '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);">'+(r.adv>0?r.adv.toFixed(2)+'%':'-')+'</td>'+
+        '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);font-weight:600;color:var(--text);">'+(r.disc>0?r.disc.toFixed(2)+'%':'-')+deltaHtml+'</td>'+
+        '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);">'+(r.highLVR>0?r.highLVR.toFixed(2)+'%':'-')+'</td>'+
+      '</tr>';
+    });
+    html+='</tbody></table>';
+    html+='</div>';
+  }
+
+  openRdModal(html);
+}
+
+// Jump from a bank tab straight to the refix email drafter, pre-selecting
+// this bank in the dropdown.
+function gotoRefixForBank(bankId){
+  emailMode='refix';
+  go('email');
+  try { renderEmail(); } catch(e) { console.error('renderEmail failed:', e); }
+  setTimeout(function(){
+    var sel=document.getElementById('r-bank');
+    if(sel && BANK_REFIX_INFO[bankId]){
+      sel.value=bankId;
+      try { updateRefixBankInfo(); } catch(e) {}
+      var client=document.getElementById('r-client');
+      if(client) client.focus();
+    }
+  },50);
+}
+
+// Click-to-edit notes per bank.
+function startNotesEdit(id){
+  var v=document.getElementById('nt-view-'+id), e=document.getElementById('nt-edit-'+id), h=document.getElementById('nt-hint-'+id);
+  if(!v||!e) return;
+  v.style.display='none'; e.style.display='block'; if(h) h.style.display='none';
+  var ta=document.getElementById('nt-ta-'+id); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); }
+}
+function cancelNotesEdit(id){
+  var v=document.getElementById('nt-view-'+id), e=document.getElementById('nt-edit-'+id), h=document.getElementById('nt-hint-'+id);
+  if(!v||!e) return;
+  e.style.display='none'; v.style.display='block'; if(h) h.style.display='inline';
+}
+function saveNotes(id){
+  var ta=document.getElementById('nt-ta-'+id); if(!ta) return;
+  var val=ta.value;
+  var b=banks[id]; if(!b) return;
+  var rd=Object.assign({},b,{notes:val});
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      var r=JSON.parse(j);
+      if(r.success){banks[id].notes=val;renderBank(id);toast(id+' notes updated');}
+      else{toast('Save failed: '+r.error,'d');}
+      load(false);
+    })
+    .withFailureHandler(function(){toast('Save failed','d');load(false);})
+    .updateBankRates(id,JSON.stringify(rd));
+}
+
 function renderBank(bankId){
   var b=banks[bankId], isEdit=editingBank===bankId;
   var fixedR=isEdit?editData.fixedRates:b.fixedRates;
   var floatR=isEdit?editData.floatingRates:b.floatingRates;
   var lem=isEdit?(editData.lemBands||b.lemBands):(b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50});
 
-  var btns=isEdit?'<button class="btn btn-p" onclick="saveBank(\''+bankId+'\')">Save changes</button><button class="btn" style="margin-left:8px" onclick="cancelEdit(\''+bankId+'\')">Cancel</button>':'<button class="btn" onclick="startEdit(\''+bankId+'\')">Edit rates</button>';
+  var refixBtn=BANK_REFIX_INFO[bankId]?'<button class="btn btn-sm" style="margin-right:8px" onclick="gotoRefixForBank(\''+bankId+'\')" title="Open refix email pre-filled for '+(b.fullName||bankId)+'">&#9993; Refix email</button>':'';
+  var btns=isEdit?'<button class="btn btn-p" onclick="saveBank(\''+bankId+'\')">Save changes</button><button class="btn" style="margin-left:8px" onclick="cancelEdit(\''+bankId+'\')">Cancel</button>':refixBtn+'<button class="btn" onclick="startEdit(\''+bankId+'\')">Edit rates</button>';
 
   // rc: renders a rate cell. Shows movement badge on discretionary column.
   function rc(v,i,f,t){
@@ -470,6 +724,8 @@ function renderBank(bankId){
   var hasPrev=(b.prevFixedRates||[]).length>0;
   var mvNote=(!isEdit&&hasPrev)?'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">&#9650; / &#9660; indicators show change from previous rate card in the Discretionary column.</div>':'';
 
+  var notesEsc=String(b.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var notesAttr=String(b.notes||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   var cashbackCard='<div class="card"><h2>Cashback &amp; Notes</h2>'+
     '<div style="margin-bottom:16px">'+
       '<label>Cashback</label>'+
@@ -479,25 +735,205 @@ function renderBank(bankId){
       '</div>'+
     '</div>'+
     '<div>'+
-      '<label>Notes</label>'+
-      '<p style="font-size:13px;color:var(--muted);line-height:1.7">'+b.notes+'</p>'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;"><label style="margin:0;">Notes</label><span id="nt-hint-'+bankId+'" style="font-size:10px;color:var(--muted);">click to edit</span></div>'+
+      '<div id="nt-view-'+bankId+'" onclick="startNotesEdit(\''+bankId+'\')" title="Click to edit" style="font-size:13px;color:var(--muted);line-height:1.7;cursor:text;border-radius:6px;padding:6px 8px;margin:-6px -8px;transition:background 120ms;" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">'+(notesEsc||'<em style="color:var(--muted);opacity:0.7;">No notes yet — click to add.</em>')+'</div>'+
+      '<div id="nt-edit-'+bankId+'" style="display:none;">'+
+        '<textarea id="nt-ta-'+bankId+'" style="font-size:13px;line-height:1.6;min-height:80px;resize:vertical;width:100%;">'+notesAttr+'</textarea>'+
+        '<div style="display:flex;gap:6px;margin-top:6px;justify-content:flex-end;">'+
+          '<button class="btn btn-sm" onclick="cancelNotesEdit(\''+bankId+'\')">Cancel</button>'+
+          '<button class="btn btn-p btn-sm" onclick="saveNotes(\''+bankId+'\')">Save</button>'+
+        '</div>'+
+      '</div>'+
     '</div>'+
   '</div>';
 
+  // Hero card: best discounted fixed rate across all terms, with delta vs prev.
+  var heroHtml = '';
+  try {
+    if (!b.isPending) {
+      var bestRate = null, bestTerm = null;
+      (fixedR || []).forEach(function(r){
+        var disc = parseFloat(r && r.disc);
+        if (!isNaN(disc) && disc > 0 && (bestRate === null || disc < bestRate)) { bestRate = disc; bestTerm = r.term; }
+      });
+      var prevBest = null;
+      if (bestTerm && (b.prevFixedRates || []).length) {
+        var prev = (b.prevFixedRates || []).find(function(x){ return x && x.term === bestTerm; });
+        if (prev && parseFloat(prev.disc) > 0) prevBest = parseFloat(prev.disc);
+      }
+      var deltaHtml = '';
+      if (prevBest != null && bestRate != null) {
+        var delta = +(bestRate - prevBest).toFixed(2);
+        if (delta > 0)      deltaHtml = '<span class="mv-chip mv-up">&#9650; +' + delta.toFixed(2) + '%</span>';
+        else if (delta < 0) deltaHtml = '<span class="mv-chip mv-dn">&#9660; ' + delta.toFixed(2) + '%</span>';
+        else                deltaHtml = '<span class="mv-chip mv-flat">unchanged</span>';
+      }
+      var cb = String(b.cashback || '').trim();
+      var color = b.color || '#1FA84A';
+      if (bestRate != null) {
+        heroHtml = '<div style="display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,var(--surface) 0%,var(--accent-bg) 100%);border:1px solid var(--border);border-left:4px solid ' + color + ';border-radius:12px;padding:14px 18px;margin-bottom:14px;flex-wrap:wrap;color:' + color + ';">' +
+          '<div style="flex:1;min-width:240px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">' +
+            '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">Best fixed</span>' +
+            '<span style="font-family:var(--font);font-size:28px;font-weight:800;color:var(--text);line-height:1;letter-spacing:-0.02em;">' + bestRate.toFixed(2) + '%</span>' +
+            '<span style="font-size:13px;color:var(--muted);font-weight:500;">' + bestTerm + '</span>' +
+            deltaHtml +
+          '</div>' +
+          (cb ? '<div style="display:flex;align-items:center;gap:8px;font-size:12px;"><span style="font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-size:10px;">Cashback</span><span style="color:var(--brand-green-bright);font-weight:700;">' + cb + '</span></div>' : '') +
+          '<div style="font-size:11px;color:var(--muted);">Updated ' + (b.lastUpdated || 'unknown') + '</div>' +
+        '</div>';
+      }
+    }
+  } catch (heroErr) { console.error('Hero render failed for ' + bankId + ':', heroErr); heroHtml = ''; }
+
+  // ── At-a-glance term cards ──
+  var atGlanceHtml = '';
+  try {
+    if (!b.isPending && (fixedR || []).length) {
+      var lemB = b.lemBands || { b80_85: 0, b85_90: 0.25, b90_95: 0.50 };
+      var lemAdd = (selectedLVRBand === 'le80' ? 0 : (lemB[selectedLVRBand] || 0));
+      var lvrLabel = selectedLVRBand === 'le80' ? '<=80% LVR'
+                    : selectedLVRBand === 'b80_85' ? '80-85% LVR'
+                    : selectedLVRBand === 'b85_90' ? '85-90% LVR' : '90-95% LVR';
+      var lvrTabs = LVR_BANDS.map(function(band){
+        var active = selectedLVRBand === band.id;
+        return '<button class="lvr-tab' + (band.id !== 'le80' ? ' high' : '') + (active ? ' active' : '') + '" onclick="setLVRBand(\'' + band.id + '\');renderBank(\'' + bankId + '\');">' + band.label + '</button>';
+      }).join('');
+
+      var bestEffective = null;
+      (fixedR || []).forEach(function(r){
+        var d = parseFloat(r.disc);
+        if (!isNaN(d) && d > 0) {
+          var eff = d + lemAdd;
+          if (bestEffective == null || eff < bestEffective) bestEffective = eff;
+        }
+      });
+
+      var termCards = (fixedR || []).map(function(r){
+        var disc = parseFloat(r.disc);
+        var adv  = parseFloat(r.adv);
+        if (isNaN(disc) || disc <= 0) {
+          return '<div style="background:var(--bg);border:1px dashed var(--border);border-radius:10px;padding:14px 16px;opacity:0.6;">' +
+            '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">' + (r.term || '') + '</div>' +
+            '<div style="font-family:var(--mono);font-size:18px;color:var(--muted);">-</div>' +
+          '</div>';
+        }
+        var effective = disc + lemAdd;
+        var isBest = bestEffective != null && Math.abs(effective - bestEffective) < 0.001;
+        var stripe = isBest ? 'border-color:var(--brand-green);box-shadow:0 0 0 1px var(--brand-green);' : '';
+        var termEsc = String(r.term || '').replace(/'/g, "\\'");
+        var spark = sparklineSvg(b._history || [], r.term, b.color || '#1FA84A');
+        return '<div onclick="openHistoryModal(\'' + bankId + '\',\'' + termEsc + '\')" title="Click for rate history · ' + r.term + '" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;transition:transform 140ms,border-color 140ms;position:relative;cursor:pointer;' + stripe + '" onmouseover="this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.transform=\'\'">' +
+          '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">' +
+            '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;">' + r.term + '</span>' +
+            (isBest ? '<span style="font-size:9px;font-weight:700;color:var(--brand-green-bright);background:var(--accent-bg);padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:0.06em;">Best</span>' : '') +
+          '</div>' +
+          '<div style="font-family:var(--font);font-size:24px;font-weight:800;color:var(--text);line-height:1;letter-spacing:-0.02em;">' + effective.toFixed(2) + '<span style="font-size:14px;color:var(--muted);font-weight:500;">%</span></div>' +
+          (adv > 0 && Math.abs(adv - effective) > 0.005
+            ? '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Adv ' + adv.toFixed(2) + '%</div>'
+            : '<div style="font-size:11px;color:var(--muted);margin-top:6px;">&nbsp;</div>') +
+          spark +
+          '<button onclick="event.stopPropagation();openCompareModal(\'' + bankId + '\',\'' + termEsc + '\')" title="Compare ' + r.term + ' across all banks" style="position:absolute;bottom:8px;right:8px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 7px;border-radius:99px;cursor:pointer;opacity:0.55;transition:opacity 120ms,background 120ms,color 120ms;" onmouseover="this.style.opacity=\'1\';this.style.background=\'var(--accent-bg)\';this.style.color=\'var(--brand-green-bright)\';" onmouseout="this.style.opacity=\'0.55\';this.style.background=\'transparent\';this.style.color=\'var(--muted)\';">Compare</button>' +
+        '</div>';
+      }).join('');
+
+      atGlanceHtml = '<div class="card" style="margin-bottom:16px;">' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">' +
+          '<h2 style="margin:0;">At a glance</h2>' +
+          '<div style="font-size:11px;color:var(--muted);">' + lvrLabel + ' · effective rates</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">' + lvrTabs + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">' + termCards + '</div>' +
+      '</div>';
+    }
+  } catch (e) { console.error('at-glance render failed:', e); atGlanceHtml = ''; }
+
+  // ── Inline repayment calc per bank — state on window.inlineCalc[bankId] ──
+  if (!window.inlineCalc) window.inlineCalc = {};
+  if (!window.inlineCalc[bankId]) window.inlineCalc[bankId] = { amount: 500000, termIdx: -1 };
+  var calcState = window.inlineCalc[bankId];
+  var calcTermOptions = (fixedR || []).filter(function(r){ return parseFloat(r.disc) > 0; }).map(function(r, i){
+    var sel = calcState.termIdx === i ? ' selected' : '';
+    return '<option value="' + i + '"' + sel + '>' + r.term + ' · ' + parseFloat(r.disc).toFixed(2) + '%</option>';
+  }).join('');
+  if (calcState.termIdx < 0 && (fixedR || []).length) {
+    for (var ci = 0; ci < (fixedR || []).length; ci++) {
+      if (parseFloat(fixedR[ci].disc) > 0) { calcState.termIdx = ci; break; }
+    }
+  }
+  var calcHtml = '';
+  try {
+    if (!b.isPending && (fixedR || []).length) {
+      var pickedTerm = (fixedR || [])[calcState.termIdx] || (fixedR || [])[0];
+      var pickedRate = pickedTerm ? parseFloat(pickedTerm.disc) : 0;
+      var amt = parseFloat(calcState.amount) || 0;
+      var amortYears = 30;
+      var amortMonths = amortYears * 12;
+      var monthlyRate = pickedRate > 0 ? (pickedRate / 100) / 12 : 0;
+      var monthly = (amt > 0 && monthlyRate > 0)
+        ? amt * monthlyRate * Math.pow(1 + monthlyRate, amortMonths) / (Math.pow(1 + monthlyRate, amortMonths) - 1)
+        : 0;
+      var fortnightly = monthly * 12 / 26;
+      var weekly      = monthly * 12 / 52;
+      function fm(n){ return '$' + Math.round(n).toLocaleString('en-NZ'); }
+      calcHtml = '<div class="card" style="margin:0;">' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">' +
+          '<h2 style="margin:0;">Quick repayment</h2>' +
+          '<div style="font-size:11px;color:var(--muted);">30-yr amortisation</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+          '<div>' +
+            '<label>Loan amount</label>' +
+            '<input id="calc-amt-' + bankId + '" type="number" step="10000" value="' + amt + '" oninput="window.inlineCalc[\'' + bankId + '\'].amount=parseFloat(this.value)||0;renderBank(\'' + bankId + '\');">' +
+          '</div>' +
+          '<div>' +
+            '<label>Term &amp; rate</label>' +
+            '<select id="calc-term-' + bankId + '" onchange="window.inlineCalc[\'' + bankId + '\'].termIdx=parseInt(this.value);renderBank(\'' + bankId + '\');">' + calcTermOptions + '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;">' +
+          '<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;">' +
+            '<div style="font-size:9.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Weekly</div>' +
+            '<div style="font-family:var(--font);font-size:14px;font-weight:700;color:var(--text);">' + fm(weekly) + '</div>' +
+          '</div>' +
+          '<div style="background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;">' +
+            '<div style="font-size:9.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Fortnightly</div>' +
+            '<div style="font-family:var(--font);font-size:14px;font-weight:700;color:var(--text);">' + fm(fortnightly) + '</div>' +
+          '</div>' +
+          '<div style="background:var(--accent-bg);border:1px solid rgba(31,168,74,0.30);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;">' +
+            '<div style="font-size:9.5px;font-weight:600;color:var(--brand-green-bright);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Monthly</div>' +
+            '<div style="font-family:var(--font);font-size:14px;font-weight:700;color:var(--text);">' + fm(monthly) + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+  } catch (e) { console.error('inline calc failed:', e); calcHtml = ''; }
+
   document.getElementById('tab-'+bankId).innerHTML=
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px"><div><h1 class="stripe" style="color:'+b.color+'">'+b.fullName+'</h1><p class="sub" style="padding-left:18px">Last updated: '+b.lastUpdated+' - All rates % p.a.</p></div><div>'+btns+'</div></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px;flex-wrap:wrap;"><div><h1 style="margin:0;color:var(--text);font-size:20px;">'+b.fullName+'</h1><p style="font-size:13px;color:var(--muted);margin-top:2px;">Last updated: '+b.lastUpdated+' · all rates % p.a.</p></div><div>'+btns+'</div></div>'+
+    heroHtml +
     pendingBanner+editBanner+
-    '<div style="display:grid;grid-template-columns:1fr 320px;gap:16px"><div>'+
-      '<div class="card"><h2>Fixed rates</h2>'+mvNote+fixedTbl+'</div>'+
-      '<div class="card"><h2>Floating / variable rates</h2>'+floatTbl+'</div>'+
-      '<div class="card"><h2>Low equity margins (LEM)</h2><p style="font-size:13px;color:var(--muted);margin-bottom:12px">Each band is the total margin added to the base &gt;80% rate for that LVR range — not cumulative. A client at 88% LVR pays base + the 85–90% margin only.</p>'+lemInputs+'</div>'+
-      cashbackCard+
-    '</div>'+
-    '<div><div class="card"><h2>Drop to update rates</h2>'+
-      '<div class="dz" id="dz-'+bankId+'" ondragover="event.preventDefault();this.classList.add(\'over\')" ondragleave="this.classList.remove(\'over\')" ondrop="handleDrop(event,\''+bankId+'\')" onclick="document.getElementById(\'fi-'+bankId+'\').click()"><div class="di">&#8659;</div><p>Drop rate card here</p><small>Screenshot - PDF - Email text</small></div>'+
-      '<input type="file" id="fi-'+bankId+'" accept="image/*,.pdf,.txt,.eml" style="display:none" onchange="fileIn(event,\''+bankId+'\')">'+
-      '<div id="ds-'+bankId+'" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>'+
-      '<div id="dp-'+bankId+'"></div></div></div></div>';
+    // Top row: At a glance (60%) + Calc (40%)
+    '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-bottom:14px;align-items:flex-start;">' +
+      '<div>' + atGlanceHtml + '</div>' +
+      '<div>' + calcHtml + '</div>' +
+    '</div>' +
+    // Bottom: details + drop zone (2-column)
+    '<div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;align-items:flex-start;">' +
+      '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
+        '<div class="card" style="margin:0;"><h2>Fixed rates</h2>'+mvNote+'<div style="overflow-x:auto;">'+fixedTbl+'</div></div>' +
+        '<div class="card" style="margin:0;"><h2>Floating / variable rates</h2><div style="overflow-x:auto;">'+floatTbl+'</div></div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
+        '<div class="card" style="margin:0;"><h2>Low equity margins (LEM)</h2><p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Each band is added to the base &gt;80% rate for that LVR range — not cumulative.</p>'+lemInputs+'</div>'+
+        cashbackCard.replace('class="card"', 'class="card" style="margin:0;"') +
+        '<div class="card" style="margin:0;"><h2>Drop to update rates</h2>'+
+          '<div class="dz" id="dz-'+bankId+'" ondragover="event.preventDefault();this.classList.add(\'over\')" ondragleave="this.classList.remove(\'over\')" ondrop="handleDrop(event,\''+bankId+'\')" onclick="document.getElementById(\'fi-'+bankId+'\').click()"><div class="di">&#8659;</div><p>Drop rate card here</p><small>Screenshot · PDF · Email text</small></div>'+
+          '<input type="file" id="fi-'+bankId+'" accept="image/*,.pdf,.txt,.eml" style="display:none" onchange="fileIn(event,\''+bankId+'\')">'+
+          '<div id="ds-'+bankId+'" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>'+
+          '<div id="dp-'+bankId+'"></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
 }
 
 function startEdit(id){
