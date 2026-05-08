@@ -917,6 +917,100 @@ function _calcPaymentRaw_(principal, annualRate, termYears, freq) {
 // NEGOTIATED RATE LOG
 // Shared across all advisers via the NegotiatedRates sheet.
 // ============================================================
+// ============================================================
+// EMAIL TEMPLATES (refix / rate update / pre-meeting)
+// ============================================================
+// Stored on an EmailTemplates tab in the Rate Desk spreadsheet so
+// templates set as defaults are shared across every adviser. Personal
+// templates stay in the browser's localStorage on the client side.
+// Schema: id | type | name | body | updatedBy | updatedAt
+function _getEmailTemplatesTab_() {
+  var ss = _rateDeskSheet_();
+  var tab = ss.getSheetByName('EmailTemplates');
+  if (!tab) {
+    tab = ss.insertSheet('EmailTemplates');
+    tab.getRange(1,1,1,6).setValues([['id','type','name','body','updatedBy','updatedAt']]);
+    tab.getRange(1,1,1,6).setBackground('#1B2A3B').setFontColor('#FFFFFF').setFontWeight('bold');
+    tab.setFrozenRows(1);
+    tab.setColumnWidth(1, 240);
+    tab.setColumnWidth(4, 480);
+  }
+  return tab;
+}
+
+// Seed the standard refix template on first read so the dropdown is
+// never empty. Idempotent — checks for existing rows first.
+function _seedDefaultEmailTemplates_(tab) {
+  if (tab.getLastRow() > 1) return;
+  var now = new Date();
+  tab.appendRow([Utilities.getUuid(), 'refix', 'Standard refix', DEFAULT_REFIX_TEMPLATE, 'system', now]);
+}
+
+// type is optional — pass 'refix' / 'rateupdate' / 'premeeting' to filter.
+function getEmailTemplates(type) {
+  try {
+    var tab = _getEmailTemplatesTab_();
+    if (tab.getLastRow() <= 1) _seedDefaultEmailTemplates_(tab);
+    var data = tab.getDataRange().getValues();
+    if (data.length <= 1) return JSON.stringify({success:true, templates:[]});
+    var rows = data.slice(1).map(function(r){
+      return {
+        id: String(r[0] || ''),
+        type: String(r[1] || ''),
+        name: String(r[2] || ''),
+        body: String(r[3] || ''),
+        updatedBy: String(r[4] || ''),
+        updatedAt: r[5] instanceof Date ? r[5].toISOString() : String(r[5] || '')
+      };
+    }).filter(function(t){ return t.id && t.type && (!type || t.type === type); });
+    return JSON.stringify({success:true, templates:rows});
+  } catch(e) {
+    Logger.log('getEmailTemplates error: ' + e.message);
+    return JSON.stringify({success:false, error:e.message, templates:[]});
+  }
+}
+
+// Save (insert or update). Payload: {id?, type, name, body}.
+function saveEmailTemplate(payloadJson) {
+  try {
+    var p = JSON.parse(payloadJson);
+    if (!p.type || !p.name || !p.body) return JSON.stringify({success:false, error:'type, name, and body are all required.'});
+    var caller = ''; try { caller = Session.getActiveUser().getEmail(); } catch(_) {}
+    var tab = _getEmailTemplatesTab_();
+    var data = tab.getDataRange().getValues();
+    if (p.id) {
+      for (var i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(p.id)) {
+          tab.getRange(i + 1, 2, 1, 5).setValues([[p.type, p.name, p.body, caller, new Date()]]);
+          return JSON.stringify({success:true, id:p.id});
+        }
+      }
+      return JSON.stringify({success:false, error:'Template not found.'});
+    }
+    var id = Utilities.getUuid();
+    tab.appendRow([id, p.type, p.name, p.body, caller, new Date()]);
+    return JSON.stringify({success:true, id:id});
+  } catch(e) {
+    return JSON.stringify({success:false, error:e.message});
+  }
+}
+
+function deleteEmailTemplate(id) {
+  try {
+    var tab = _getEmailTemplatesTab_();
+    var data = tab.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) {
+        tab.deleteRow(i + 1);
+        return JSON.stringify({success:true});
+      }
+    }
+    return JSON.stringify({success:false, error:'Template not found.'});
+  } catch(e) {
+    return JSON.stringify({success:false, error:e.message});
+  }
+}
+
 function getNegotiatedRates() {
   try {
     const ss = _rateDeskSheet_();

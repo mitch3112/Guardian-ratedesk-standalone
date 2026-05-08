@@ -1067,17 +1067,17 @@ function renderRateUpdateEmail(){
       emailOutputPanel() + '</div>';
 }
 
+// Templates state for the refix tab. Defaults are server-stored, personal
+// templates are localStorage-only. currentId tracks which template is
+// loaded into the textarea so Save knows where to write back.
+var _refixTpl = { defaults: [], personal: [], currentId: '', currentScope: '' };
+
 function renderRefixEmail(){
   var bankOpts='<option value="">Select bank...</option>'+
     Object.keys(BANK_REFIX_INFO).map(function(key){
       var b=BANK_REFIX_INFO[key];
       return '<option value="'+key+'">'+b.label+'</option>';
     }).join('');
-
-  var savedTpl='';
-  try{ savedTpl=localStorage.getItem('ratedesk_refix_tpl')||''; }catch(e){}
-  var tplValue=escHtml(savedTpl||DEFAULT_REFIX_TEMPLATE);
-  var hasSaved=!!savedTpl;
 
   document.getElementById('email-body').innerHTML=
     '<div style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">'+
@@ -1096,22 +1096,179 @@ function renderRefixEmail(){
         '<button class="btn btn-p" style="width:100%;padding:10px" onclick="genRefixEmail()">Draft refix email</button>'+
       '</div>'+
       '<div class="card">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">'+
           '<h2 style="margin:0">Email template</h2>'+
-          '<div style="display:flex;gap:6px">'+
-            '<button class="btn btn-p btn-sm" onclick="saveRefixTemplate()">Save</button>'+
-            '<button class="btn btn-sm" onclick="resetRefixTemplate()">Reset</button>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+            '<button class="btn btn-p btn-sm" onclick="saveCurrentRefixTemplate()">Save</button>'+
+            '<button class="btn btn-sm" onclick="saveAsNewRefixTemplate()">Save as new…</button>'+
+            '<button class="btn btn-sm" onclick="deleteCurrentRefixTemplate()" style="color:var(--danger);border-color:rgba(220,38,38,0.3)">Delete</button>'+
           '</div>'+
         '</div>'+
-        '<p style="font-size:11px;color:var(--muted);margin-bottom:10px">'+
-          (hasSaved?'<span style="color:var(--success)">&#10003; Your saved template</span>&ensp;&middot;&ensp;':'')+'Saved per browser. Placeholders: [Client Name], [Bank Name], [Insert Date], [Refix Window], [INSERT SCREENSHOT OF CURRENT RATES HERE], [Adviser Name]'+
-        '</p>'+
-        '<textarea id="r-template" style="min-height:260px;resize:vertical;font-size:12px;line-height:1.65">'+tplValue+'</textarea>'+
+        '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
+          '<label style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px;color:var(--muted);">Template</label>'+
+          '<select id="r-tpl-select" onchange="onRefixTplSelect()" style="flex:1;min-width:200px;">'+
+            '<option value="">Loading…</option>'+
+          '</select>'+
+        '</div>'+
+        '<p style="font-size:11px;color:var(--muted);margin-bottom:10px" id="r-tpl-hint">Defaults are shared across the team. Personal templates save to this browser only. Placeholders: [Client Name], [Bank Name], [Insert Date], [Refix Window], [INSERT SCREENSHOT OF CURRENT RATES HERE], [Adviser Name]</p>'+
+        '<textarea id="r-template" style="min-height:260px;resize:vertical;font-size:12px;line-height:1.65"></textarea>'+
         '<div id="r-tpl-status" style="font-size:11px;color:var(--success);margin-top:6px;min-height:16px"></div>'+
       '</div>'+
     '</div>'+
     emailOutputPanel()+
     '</div>';
+
+  loadRefixTemplates();
+}
+
+// ── Template helpers ───────────────────────────────────────
+function _personalTemplates(type){
+  try { return (JSON.parse(localStorage.getItem('ratedesk_personal_tpl_'+type)||'[]')) || []; }
+  catch(e){ return []; }
+}
+function _setPersonalTemplates(type, list){
+  try { localStorage.setItem('ratedesk_personal_tpl_'+type, JSON.stringify(list)); } catch(e){}
+}
+function _uuid(){ return 'p-' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+function loadRefixTemplates(){
+  _refixTpl.personal = _personalTemplates('refix');
+  google.script.run
+    .withSuccessHandler(function(j){
+      try {
+        var r = JSON.parse(j);
+        _refixTpl.defaults = (r && r.success && r.templates) ? r.templates : [];
+      } catch(e){ _refixTpl.defaults = []; }
+      _renderRefixTplDropdown();
+    })
+    .withFailureHandler(function(){ _refixTpl.defaults = []; _renderRefixTplDropdown(); })
+    .getEmailTemplates('refix');
+}
+
+function _renderRefixTplDropdown(){
+  var sel = document.getElementById('r-tpl-select'); if (!sel) return;
+  var opts = '<option value="">— Pick a template —</option>';
+  if (_refixTpl.defaults.length) {
+    opts += '<optgroup label="Default templates (shared)">' +
+      _refixTpl.defaults.map(function(t){ return '<option value="d:'+t.id+'">'+escHtml(t.name)+'</option>'; }).join('') +
+    '</optgroup>';
+  }
+  if (_refixTpl.personal.length) {
+    opts += '<optgroup label="My templates (this browser)">' +
+      _refixTpl.personal.map(function(t){ return '<option value="p:'+t.id+'">'+escHtml(t.name)+'</option>'; }).join('') +
+    '</optgroup>';
+  }
+  sel.innerHTML = opts;
+  // Auto-select the first default if no current selection
+  if (!_refixTpl.currentId && _refixTpl.defaults.length) {
+    var first = _refixTpl.defaults[0];
+    sel.value = 'd:' + first.id;
+    _refixTpl.currentId = first.id; _refixTpl.currentScope = 'default';
+    var ta = document.getElementById('r-template'); if (ta) ta.value = first.body;
+  }
+}
+
+function onRefixTplSelect(){
+  var sel = document.getElementById('r-tpl-select'); if (!sel) return;
+  var v = sel.value;
+  var ta = document.getElementById('r-template');
+  if (!v) { _refixTpl.currentId = ''; _refixTpl.currentScope = ''; return; }
+  var scope = v.charAt(0) === 'd' ? 'default' : 'personal';
+  var id = v.slice(2);
+  var pool = scope === 'default' ? _refixTpl.defaults : _refixTpl.personal;
+  var t = pool.find(function(x){ return String(x.id) === String(id); });
+  if (!t) return;
+  _refixTpl.currentId = id; _refixTpl.currentScope = scope;
+  if (ta) ta.value = t.body;
+  var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = 'Loaded · ' + t.name + (scope === 'default' ? ' (shared default)' : ' (personal)'); s.style.color = 'var(--muted)'; }
+}
+
+function saveCurrentRefixTemplate(){
+  var ta = document.getElementById('r-template'); if (!ta) return;
+  if (!_refixTpl.currentId) { saveAsNewRefixTemplate(); return; }
+  if (_refixTpl.currentScope === 'personal') {
+    var list = _refixTpl.personal;
+    var idx = list.findIndex(function(t){ return String(t.id) === String(_refixTpl.currentId); });
+    if (idx === -1) { toast('Template not found locally','d'); return; }
+    list[idx].body = ta.value; list[idx].updatedAt = new Date().toISOString();
+    _setPersonalTemplates('refix', list);
+    var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = '✓ Saved to this browser'; s.style.color = 'var(--success)'; setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},3000); }
+    return;
+  }
+  // Default — server save
+  var existing = _refixTpl.defaults.find(function(t){ return String(t.id) === String(_refixTpl.currentId); });
+  if (!existing) { toast('Template not found','d'); return; }
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      load(false);
+      var r; try { r = JSON.parse(j); } catch(e) { toast('Save failed','d'); return; }
+      if (!r.success) { toast('Save failed: ' + (r.error||'unknown'),'d'); return; }
+      existing.body = ta.value; existing.updatedAt = new Date().toISOString();
+      var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = '✓ Saved · shared default updated'; s.style.color = 'var(--success)'; setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},3000); }
+    })
+    .withFailureHandler(function(){ load(false); toast('Save failed','d'); })
+    .saveEmailTemplate(JSON.stringify({ id: existing.id, type: 'refix', name: existing.name, body: ta.value }));
+}
+
+function saveAsNewRefixTemplate(){
+  var ta = document.getElementById('r-template'); if (!ta) return;
+  var name = window.prompt('Name this template:'); if (name === null) return;
+  name = String(name).trim(); if (!name) { toast('Name required','d'); return; }
+  var scope = window.confirm('Make this template available to everyone? (Cancel for personal — saves to this browser only.)') ? 'default' : 'personal';
+  if (scope === 'personal') {
+    var list = _refixTpl.personal.slice();
+    var id = _uuid();
+    list.push({ id: id, type: 'refix', name: name, body: ta.value, updatedAt: new Date().toISOString() });
+    _setPersonalTemplates('refix', list);
+    _refixTpl.personal = list;
+    _refixTpl.currentId = id; _refixTpl.currentScope = 'personal';
+    _renderRefixTplDropdown();
+    var sel = document.getElementById('r-tpl-select'); if (sel) sel.value = 'p:' + id;
+    toast('Saved as personal template');
+    return;
+  }
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      load(false);
+      var r; try { r = JSON.parse(j); } catch(e) { toast('Save failed','d'); return; }
+      if (!r.success) { toast('Save failed: ' + (r.error||'unknown'),'d'); return; }
+      _refixTpl.defaults.push({ id: r.id, type: 'refix', name: name, body: ta.value, updatedAt: new Date().toISOString() });
+      _refixTpl.currentId = r.id; _refixTpl.currentScope = 'default';
+      _renderRefixTplDropdown();
+      var sel = document.getElementById('r-tpl-select'); if (sel) sel.value = 'd:' + r.id;
+      toast('Saved as shared default');
+    })
+    .withFailureHandler(function(){ load(false); toast('Save failed','d'); })
+    .saveEmailTemplate(JSON.stringify({ type: 'refix', name: name, body: ta.value }));
+}
+
+function deleteCurrentRefixTemplate(){
+  if (!_refixTpl.currentId) { toast('No template selected','d'); return; }
+  if (!window.confirm('Delete this template? This cannot be undone.')) return;
+  var id = _refixTpl.currentId, scope = _refixTpl.currentScope;
+  if (scope === 'personal') {
+    _refixTpl.personal = _refixTpl.personal.filter(function(t){ return String(t.id) !== String(id); });
+    _setPersonalTemplates('refix', _refixTpl.personal);
+    _refixTpl.currentId = ''; _refixTpl.currentScope = '';
+    _renderRefixTplDropdown();
+    toast('Deleted');
+    return;
+  }
+  load(true);
+  google.script.run
+    .withSuccessHandler(function(j){
+      load(false);
+      var r; try { r = JSON.parse(j); } catch(e) { toast('Delete failed','d'); return; }
+      if (!r.success) { toast('Delete failed: ' + (r.error||'unknown'),'d'); return; }
+      _refixTpl.defaults = _refixTpl.defaults.filter(function(t){ return String(t.id) !== String(id); });
+      _refixTpl.currentId = ''; _refixTpl.currentScope = '';
+      _renderRefixTplDropdown();
+      toast('Default template deleted');
+    })
+    .withFailureHandler(function(){ load(false); toast('Delete failed','d'); })
+    .deleteEmailTemplate(id);
 }
 
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
