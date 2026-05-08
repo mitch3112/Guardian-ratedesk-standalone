@@ -940,10 +940,26 @@ function _getEmailTemplatesTab_() {
 
 // Seed the standard refix template on first read so the dropdown is
 // never empty. Idempotent — checks for existing rows first.
+// Server-side mirror of the client's DEFAULT_REFIX_TEMPLATE constant.
+// Used to seed the EmailTemplates tab on first read so the dropdown
+// is never empty. Keep these two definitions in sync.
+var SERVER_DEFAULT_REFIX_TEMPLATE =
+"Subject: Loan Refixing: [Client Name] - [Bank Name] Refix Window Open\n\n" +
+"Hi [Client Name],\n\n" +
+"Hope you're doing well and having a good week so far.\n\n" +
+"Just touching base as one of your loans is coming up for refix on [Insert Date], so you're now within your [Refix Window] refix window with [Bank Name].\n\n" +
+"There's been quite a bit happening with interest rates recently. Most economists are signaling that we have now hit the bottom of the interest rate market, and as a result, we're seeing a lot of clients looking to lock something in sooner rather than later for a bit of certainty.\n\n" +
+"Currently, the two- and three-year terms seem to be the sweet spot. We've noticed the four- and five-year rates have increased slightly further recently, making them a bit less appealing compared to the other options. However, if flexibility is your priority, a shorter-term rate is always a good option to keep your doors open.\n\n" +
+"Current [Bank Name] Rates (Under 80% LVR):\n\n" +
+"[INSERT SCREENSHOT OF CURRENT RATES HERE]\n\n" +
+"Please note: Rates change daily and nothing is locked in until I have your confirmation and have submitted this to the bank.\n\n" +
+"Next Steps: Once you've had a look, let me know which option you'd like to go with, and whether you'd like to keep repayments at a specific level or move to the new minimum.\n\n" +
+"Cheers, [Adviser Name]";
+
 function _seedDefaultEmailTemplates_(tab) {
   if (tab.getLastRow() > 1) return;
   var now = new Date();
-  tab.appendRow([Utilities.getUuid(), 'refix', 'Standard refix', DEFAULT_REFIX_TEMPLATE, 'system', now]);
+  tab.appendRow([Utilities.getUuid(), 'refix', 'Standard refix', SERVER_DEFAULT_REFIX_TEMPLATE, 'system', now]);
 }
 
 // type is optional — pass 'refix' / 'rateupdate' / 'premeeting' to filter.
