@@ -156,6 +156,7 @@ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase
     <button class="nb" id="nav-CoOp"     onclick="go('CoOp')"><span class="dot" style="background:#005B30"></span>Co-op</button>
     <button class="nb" id="nav-SBS"      onclick="go('SBS')"><span class="dot" style="background:#003882"></span>SBS</button>
     <button class="nb" id="nav-TSB"      onclick="go('TSB')"><span class="dot" style="background:#E31837"></span>TSB</button>
+    <button class="nb" id="nav-AIA"      onclick="go('AIA')"><span class="dot" style="background:#7C2D12"></span>AIA</button>
     <div class="ns">Tools</div>
     <button class="nb" id="nav-email" onclick="go('email')">
       <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg>
@@ -184,6 +185,7 @@ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase
     <div id="tab-CoOp"     style="display:none"></div>
     <div id="tab-SBS"      style="display:none"></div>
     <div id="tab-TSB"      style="display:none"></div>
+    <div id="tab-AIA"      style="display:none"></div>
     <div id="tab-email"    style="display:none"></div>
     <div id="tab-calc"     style="display:none"></div>
     <div id="tab-ratelog"  style="display:none"></div>
@@ -199,9 +201,9 @@ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase
 'use strict';
 
 var TERMS=['6 month','1 year','18 month','2 year','3 year','4 year','5 year'];
-var COLORS={BNZ:'#00529B',ASB:'#D0021B',Westpac:'#C8102E',ANZ:'#007ABF',Kiwibank:'#00A39B',CoOp:'#005B30',SBS:'#003882',TSB:'#E31837'};
-var NAMES={BNZ:'Bank of New Zealand',ASB:'ASB Bank',Westpac:'Westpac NZ',ANZ:'ANZ Bank NZ',Kiwibank:'Kiwibank',CoOp:'Co-operative Bank',SBS:'SBS Bank',TSB:'TSB Bank'};
-var BANKS_ORDER=['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB'];
+var COLORS={BNZ:'#00529B',ASB:'#D0021B',Westpac:'#C8102E',ANZ:'#007ABF',Kiwibank:'#00A39B',CoOp:'#005B30',SBS:'#003882',TSB:'#E31837',AIA:'#7C2D12'};
+var NAMES={BNZ:'Bank of New Zealand',ASB:'ASB Bank',Westpac:'Westpac NZ',ANZ:'ANZ Bank NZ',Kiwibank:'Kiwibank',CoOp:'Co-operative Bank',SBS:'SBS Bank',TSB:'TSB Bank',AIA:'AIA Home Loans'};
+var BANKS_ORDER=['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB','AIA'];
 
 var LVR_BANDS=[
   {id:'le80',  label:'<=80% LVR', desc:'Discretionary rate'},
@@ -681,8 +683,14 @@ function renderBank(bankId){
   var floatR=isEdit?editData.floatingRates:b.floatingRates;
   var lem=isEdit?(editData.lemBands||b.lemBands):(b.lemBands||{b80_85:0,b85_90:0.25,b90_95:0.50});
 
+  // Mirrored banks (e.g. AIA copies ASB) lock edit + drop-zone since
+  // their rates are derived. Updates flow when the source bank updates.
+  var isMirrored = !!b.mirroredFrom;
   var refixBtn=BANK_REFIX_INFO[bankId]?'<button class="btn btn-sm" style="margin-right:8px" onclick="gotoRefixForBank(\''+bankId+'\')" title="Open refix email pre-filled for '+(b.fullName||bankId)+'">&#9993; Refix email</button>':'';
-  var btns=isEdit?'<button class="btn btn-p" onclick="saveBank(\''+bankId+'\')">Save changes</button><button class="btn" style="margin-left:8px" onclick="cancelEdit(\''+bankId+'\')">Cancel</button>':refixBtn+'<button class="btn" onclick="startEdit(\''+bankId+'\')">Edit rates</button>';
+  var editBtn = isMirrored
+    ? '<span style="font-size:11px;color:var(--muted);font-style:italic">Edit '+b.mirroredFrom+' to update</span>'
+    : '<button class="btn" onclick="startEdit(\''+bankId+'\')">Edit rates</button>';
+  var btns=isEdit?'<button class="btn btn-p" onclick="saveBank(\''+bankId+'\')">Save changes</button><button class="btn" style="margin-left:8px" onclick="cancelEdit(\''+bankId+'\')">Cancel</button>':refixBtn+editBtn;
 
   // rc: renders a rate cell. Shows movement badge on discretionary column.
   function rc(v,i,f,t){
@@ -908,8 +916,13 @@ function renderBank(bankId){
     }
   } catch (e) { console.error('inline calc failed:', e); calcHtml = ''; }
 
+  var mirrorBanner = isMirrored
+    ? '<div style="border:1px solid var(--border);border-left:4px solid '+(b.color||'#7C2D12')+';background:var(--bg);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--text);"><strong>Rates mirrored from '+b.mirroredFrom+'.</strong> <span style="color:var(--muted)">Updates here automatically when '+b.mirroredFrom+' updates. Edit the source bank to change these rates.</span></div>'
+    : '';
+
   document.getElementById('tab-'+bankId).innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px;flex-wrap:wrap;"><div><h1 style="margin:0;color:var(--text);font-size:20px;">'+b.fullName+'</h1><p style="font-size:13px;color:var(--muted);margin-top:2px;">Last updated: '+b.lastUpdated+' · all rates % p.a.</p></div><div>'+btns+'</div></div>'+
+    mirrorBanner +
     heroHtml +
     pendingBanner+editBanner+
     // Top row: At a glance (60%) + Calc (40%)
@@ -926,12 +939,15 @@ function renderBank(bankId){
       '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
         '<div class="card" style="margin:0;"><h2>Low equity margins (LEM)</h2><p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Each band is added to the base &gt;80% rate for that LVR range — not cumulative.</p>'+lemInputs+'</div>'+
         cashbackCard.replace('class="card"', 'class="card" style="margin:0;"') +
+        // Drop-zone hidden for mirrored banks — uploading a card to AIA
+        // would do nothing since the rates are derived from ASB.
+        (isMirrored ? '' :
         '<div class="card" style="margin:0;"><h2>Drop to update rates</h2>'+
           '<div class="dz" id="dz-'+bankId+'" ondragover="event.preventDefault();this.classList.add(\'over\')" ondragleave="this.classList.remove(\'over\')" ondrop="handleDrop(event,\''+bankId+'\')" onclick="document.getElementById(\'fi-'+bankId+'\').click()"><div class="di">&#8659;</div><p>Drop rate card here</p><small>Screenshot · PDF · Email text</small></div>'+
           '<input type="file" id="fi-'+bankId+'" accept="image/*,.pdf,.txt,.eml" style="display:none" onchange="fileIn(event,\''+bankId+'\')">'+
           '<div id="ds-'+bankId+'" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>'+
           '<div id="dp-'+bankId+'"></div>' +
-        '</div>' +
+        '</div>') +
       '</div>' +
     '</div>';
 }

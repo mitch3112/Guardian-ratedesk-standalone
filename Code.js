@@ -3,7 +3,12 @@
 // Changes: prevFixedRates tracking for rate movement indicators
 // ============================================================
 
-const BANK_IDS = ['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB'];
+const BANK_IDS = ['BNZ','ASB','Westpac','ANZ','Kiwibank','CoOp','SBS','TSB','AIA'];
+
+// Banks that mirror another bank's rates rather than publishing their own.
+// At read time, getAllRates copies the source bank's data over and tags
+// it with mirroredFrom so the UI can lock editing and show a banner.
+const MIRRORED_BANKS = { AIA: 'ASB' };
 
 // One bank can have multiple sending addresses — list them as an array.
 // scanGmailForRates builds a Gmail `from:(a OR b)` query so the most
@@ -17,7 +22,8 @@ const BANK_SENDERS = {
   Kiwibank: ['AdviserComms@kiwibank.co.nz'],
   CoOp:     ['TheCo-operativeBank@email.co-operativebank.co.nz'],
   SBS:      ['comms@e.sbsbank.co.nz'],
-  TSB:      ['theteam@mail.tsb.co.nz']
+  TSB:      ['theteam@mail.tsb.co.nz'],
+  AIA:      []
 };
 
 const BANK_FULL_NAMES = {
@@ -28,7 +34,8 @@ const BANK_FULL_NAMES = {
   Kiwibank: 'Kiwibank',
   CoOp:     'Co-operative Bank',
   SBS:      'SBS Bank',
-  TSB:      'TSB Bank'
+  TSB:      'TSB Bank',
+  AIA:      'AIA Home Loans'
 };
 
 const DEFAULT_LEM = {b80_85: 0, b85_90: 0.25, b90_95: 0.50};
@@ -163,6 +170,15 @@ const DEFAULT_RATES = {
     ],
     floatingRates: [{name:'Floating', adv:0,disc:0,highLVR:0}],
     cashback: 'Check TSB adviser portal.', notes: 'Drop rate card to update.'
+  },
+  // AIA placeholder. Real values are overlaid from ASB at read time
+  // via MIRRORED_BANKS — this entry just exists so a fresh sheet boot
+  // doesn't crash before mirroring runs.
+  AIA: {
+    isPending: false, lastUpdated: '',
+    lemBands: {b80_85: 0, b85_90: 0.25, b90_95: 0.50},
+    fixedRates: [], floatingRates: [],
+    cashback: 'Mirrored from ASB.', notes: 'Rates and pricing inherited from ASB. Updates here automatically when ASB updates.'
   }
 };
 
@@ -218,6 +234,27 @@ function getAllRates() {
       const sheet = ss.getSheetByName(bankId);
       result[bankId] = sheet ? parseSheet(sheet, bankId) : Object.assign({id: bankId}, DEFAULT_RATES[bankId]);
     });
+    // Apply mirroring after every bank is loaded — a mirrored bank
+    // takes its source's rates / lemBands / lastUpdated but keeps its
+    // own id and gets a mirroredFrom flag the UI uses to lock editing.
+    Object.keys(MIRRORED_BANKS).forEach(function(targetId){
+      var sourceId = MIRRORED_BANKS[targetId];
+      if (!result[sourceId] || result[sourceId].isPending) return;
+      var source = result[sourceId];
+      var existingTarget = result[targetId] || {};
+      result[targetId] = {
+        id: targetId,
+        isPending: false,
+        lastUpdated: source.lastUpdated,
+        lemBands: Object.assign({}, source.lemBands || {}),
+        fixedRates: (source.fixedRates || []).map(function(r){ return Object.assign({}, r); }),
+        prevFixedRates: (source.prevFixedRates || []).map(function(r){ return Object.assign({}, r); }),
+        floatingRates: (source.floatingRates || []).map(function(r){ return Object.assign({}, r); }),
+        cashback: existingTarget.cashback || ('Mirrored from ' + sourceId + '.'),
+        notes: existingTarget.notes || ('Rates inherited from ' + sourceId + '. Updates here when ' + sourceId + ' updates.'),
+        mirroredFrom: sourceId
+      };
+    });
     return JSON.stringify(result);
   } catch (e) {
     Logger.log('getAllRates error: ' + e.message);
@@ -256,6 +293,9 @@ function parseSheet(sheet, bankId) {
 // ============================================================
 function updateBankRates(bankId, rateDataJson) {
   try {
+    if (MIRRORED_BANKS[bankId]) {
+      return JSON.stringify({success:false, error: bankId + ' rates mirror ' + MIRRORED_BANKS[bankId] + '. Update ' + MIRRORED_BANKS[bankId] + ' instead.'});
+    }
     const d = JSON.parse(rateDataJson);
     d.lastUpdated = formatDateValue(d.lastUpdated) || d.lastUpdated;
     if (d.fixedRates) d.fixedRates = d.fixedRates.map(function(r){return Object.assign({},r,{term:normalizeTerm(r.term)});});
