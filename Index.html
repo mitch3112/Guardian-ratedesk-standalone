@@ -1561,7 +1561,10 @@ function cpEmail(){
     var holder = document.createElement('div');
     holder.contentEditable = 'true';
     holder.innerHTML = html;
-    holder.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;white-space:pre-wrap;';
+    // Force white background + dark text so the rich copy doesn't bake in
+    // the Rate Desk's dark theme. Gmail keeps whatever styles are on the
+    // selected range, including inherited body colour.
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;white-space:pre-wrap;background:#ffffff;color:#0a0a0a;';
     document.body.appendChild(holder);
     var range = document.createRange();
     range.selectNodeContents(holder);

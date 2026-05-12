@@ -658,7 +658,10 @@ function _buildEmailHtml_(plainBody, links) {
       links.map(function(l){ return '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>'; }).join(' &middot; ') +
       '</p>';
   }
-  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;">' + subjectHtml + paras + linksHtml + '</div>';
+  // Explicit white background + dark text on the wrapper so the rich-text
+  // copy doesn't inherit the dark-theme Rate Desk background when the user
+  // pastes into Gmail.
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;background:#ffffff;">' + subjectHtml + paras + linksHtml + '</div>';
 }
 
 // ============================================================
