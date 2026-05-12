@@ -1112,6 +1112,21 @@ function renderRefixEmail(){
         '</div>'+
         '<p style="font-size:11px;color:var(--muted);margin-bottom:10px" id="r-tpl-hint">Defaults are shared across the team. Personal templates save to this browser only. Placeholders: [Client Name], [Bank Name], [Insert Date], [Refix Window], [INSERT SCREENSHOT OF CURRENT RATES HERE], [Adviser Name]</p>'+
         '<textarea id="r-template" style="min-height:260px;resize:vertical;font-size:12px;line-height:1.65"></textarea>'+
+        // Two optional footer links — render as clickable text at the bottom of the email.
+        '<div style="margin-top:12px;border:1px dashed var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-elevated,rgba(0,0,0,0.02));">'+
+          '<div style="font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;">Footer links (optional)</div>'+
+          '<div style="display:grid;grid-template-columns:140px 1fr;gap:6px 8px;align-items:center;font-size:12px;">'+
+            '<label style="margin:0;font-size:11.5px;color:var(--muted);">Link 1 label</label>'+
+            '<input id="r-link1-label" type="text" placeholder="e.g. Refix online here" style="font-size:12px;padding:5px 8px;">'+
+            '<label style="margin:0;font-size:11.5px;color:var(--muted);">Link 1 URL</label>'+
+            '<input id="r-link1-url" type="url" placeholder="https://…" style="font-size:12px;padding:5px 8px;">'+
+            '<label style="margin:0;font-size:11.5px;color:var(--muted);">Link 2 label</label>'+
+            '<input id="r-link2-label" type="text" placeholder="e.g. View live rates" style="font-size:12px;padding:5px 8px;">'+
+            '<label style="margin:0;font-size:11.5px;color:var(--muted);">Link 2 URL</label>'+
+            '<input id="r-link2-url" type="url" placeholder="https://…" style="font-size:12px;padding:5px 8px;">'+
+          '</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Appended to the bottom of the email as clickable text. Save the template to keep them.</div>'+
+        '</div>'+
         '<div id="r-tpl-status" style="font-size:11px;color:var(--success);margin-top:6px;min-height:16px"></div>'+
       '</div>'+
     '</div>'+
@@ -1165,7 +1180,26 @@ function _renderRefixTplDropdown(){
     sel.value = 'd:' + first.id;
     _refixTpl.currentId = first.id; _refixTpl.currentScope = 'default';
     var ta = document.getElementById('r-template'); if (ta) ta.value = first.body;
+    _refixApplyLinks(first);
   }
+}
+
+// Fill the two link input pairs from a template object.
+function _refixApplyLinks(t){
+  var l1 = document.getElementById('r-link1-label'); var u1 = document.getElementById('r-link1-url');
+  var l2 = document.getElementById('r-link2-label'); var u2 = document.getElementById('r-link2-url');
+  if (l1) l1.value = (t && t.linkLabel1) || '';
+  if (u1) u1.value = (t && t.linkUrl1)   || '';
+  if (l2) l2.value = (t && t.linkLabel2) || '';
+  if (u2) u2.value = (t && t.linkUrl2)   || '';
+}
+function _refixReadLinks(){
+  return {
+    linkLabel1: ((document.getElementById('r-link1-label')||{}).value || '').trim(),
+    linkUrl1:   ((document.getElementById('r-link1-url')  ||{}).value || '').trim(),
+    linkLabel2: ((document.getElementById('r-link2-label')||{}).value || '').trim(),
+    linkUrl2:   ((document.getElementById('r-link2-url')  ||{}).value || '').trim()
+  };
 }
 
 function onRefixTplSelect(){
@@ -1180,17 +1214,22 @@ function onRefixTplSelect(){
   if (!t) return;
   _refixTpl.currentId = id; _refixTpl.currentScope = scope;
   if (ta) ta.value = t.body;
+  _refixApplyLinks(t);
   var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = 'Loaded · ' + t.name + (scope === 'default' ? ' (shared default)' : ' (personal)'); s.style.color = 'var(--muted)'; }
 }
 
 function saveCurrentRefixTemplate(){
   var ta = document.getElementById('r-template'); if (!ta) return;
   if (!_refixTpl.currentId) { saveAsNewRefixTemplate(); return; }
+  var links = _refixReadLinks();
   if (_refixTpl.currentScope === 'personal') {
     var list = _refixTpl.personal;
     var idx = list.findIndex(function(t){ return String(t.id) === String(_refixTpl.currentId); });
     if (idx === -1) { toast('Template not found locally','d'); return; }
-    list[idx].body = ta.value; list[idx].updatedAt = new Date().toISOString();
+    list[idx].body = ta.value;
+    list[idx].linkLabel1 = links.linkLabel1; list[idx].linkUrl1 = links.linkUrl1;
+    list[idx].linkLabel2 = links.linkLabel2; list[idx].linkUrl2 = links.linkUrl2;
+    list[idx].updatedAt = new Date().toISOString();
     _setPersonalTemplates('refix', list);
     var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = '✓ Saved to this browser'; s.style.color = 'var(--success)'; setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},3000); }
     return;
@@ -1204,11 +1243,18 @@ function saveCurrentRefixTemplate(){
       load(false);
       var r; try { r = JSON.parse(j); } catch(e) { toast('Save failed','d'); return; }
       if (!r.success) { toast('Save failed: ' + (r.error||'unknown'),'d'); return; }
-      existing.body = ta.value; existing.updatedAt = new Date().toISOString();
+      existing.body = ta.value;
+      existing.linkLabel1 = links.linkLabel1; existing.linkUrl1 = links.linkUrl1;
+      existing.linkLabel2 = links.linkLabel2; existing.linkUrl2 = links.linkUrl2;
+      existing.updatedAt = new Date().toISOString();
       var s = document.getElementById('r-tpl-status'); if (s) { s.textContent = '✓ Saved · shared default updated'; s.style.color = 'var(--success)'; setTimeout(function(){var s2=document.getElementById('r-tpl-status');if(s2)s2.textContent='';},3000); }
     })
     .withFailureHandler(function(){ load(false); toast('Save failed','d'); })
-    .saveEmailTemplate(JSON.stringify({ id: existing.id, type: 'refix', name: existing.name, body: ta.value }));
+    .saveEmailTemplate(JSON.stringify({
+      id: existing.id, type: 'refix', name: existing.name, body: ta.value,
+      linkLabel1: links.linkLabel1, linkUrl1: links.linkUrl1,
+      linkLabel2: links.linkLabel2, linkUrl2: links.linkUrl2
+    }));
 }
 
 function saveAsNewRefixTemplate(){
@@ -1216,10 +1262,16 @@ function saveAsNewRefixTemplate(){
   var name = window.prompt('Name this template:'); if (name === null) return;
   name = String(name).trim(); if (!name) { toast('Name required','d'); return; }
   var scope = window.confirm('Make this template available to everyone? (Cancel for personal — saves to this browser only.)') ? 'default' : 'personal';
+  var links = _refixReadLinks();
   if (scope === 'personal') {
     var list = _refixTpl.personal.slice();
     var id = _uuid();
-    list.push({ id: id, type: 'refix', name: name, body: ta.value, updatedAt: new Date().toISOString() });
+    list.push({
+      id: id, type: 'refix', name: name, body: ta.value,
+      linkLabel1: links.linkLabel1, linkUrl1: links.linkUrl1,
+      linkLabel2: links.linkLabel2, linkUrl2: links.linkUrl2,
+      updatedAt: new Date().toISOString()
+    });
     _setPersonalTemplates('refix', list);
     _refixTpl.personal = list;
     _refixTpl.currentId = id; _refixTpl.currentScope = 'personal';
@@ -1234,14 +1286,23 @@ function saveAsNewRefixTemplate(){
       load(false);
       var r; try { r = JSON.parse(j); } catch(e) { toast('Save failed','d'); return; }
       if (!r.success) { toast('Save failed: ' + (r.error||'unknown'),'d'); return; }
-      _refixTpl.defaults.push({ id: r.id, type: 'refix', name: name, body: ta.value, updatedAt: new Date().toISOString() });
+      _refixTpl.defaults.push({
+        id: r.id, type: 'refix', name: name, body: ta.value,
+        linkLabel1: links.linkLabel1, linkUrl1: links.linkUrl1,
+        linkLabel2: links.linkLabel2, linkUrl2: links.linkUrl2,
+        updatedAt: new Date().toISOString()
+      });
       _refixTpl.currentId = r.id; _refixTpl.currentScope = 'default';
       _renderRefixTplDropdown();
       var sel = document.getElementById('r-tpl-select'); if (sel) sel.value = 'd:' + r.id;
       toast('Saved as shared default');
     })
     .withFailureHandler(function(){ load(false); toast('Save failed','d'); })
-    .saveEmailTemplate(JSON.stringify({ type: 'refix', name: name, body: ta.value }));
+    .saveEmailTemplate(JSON.stringify({
+      type: 'refix', name: name, body: ta.value,
+      linkLabel1: links.linkLabel1, linkUrl1: links.linkUrl1,
+      linkLabel2: links.linkLabel2, linkUrl2: links.linkUrl2
+    }));
 }
 
 function deleteCurrentRefixTemplate(){
@@ -1452,6 +1513,7 @@ function genRefixEmail(){
   var bankInfo=BANK_REFIX_INFO[bankKey];
   if(!bankInfo){toast('Unknown bank selected','d');return;}
   var templateBody=(document.getElementById('r-template')||{}).value||DEFAULT_REFIX_TEMPLATE;
+  var links = _refixReadLinks();
   var cfg={
     bankId:       bankInfo.bankId,
     bankLabel:    bankInfo.label,
@@ -1462,15 +1524,46 @@ function genRefixEmail(){
     refixDate:    (document.getElementById('r-date')||{}).value||'',
     propertyRef:  (document.getElementById('r-prop')||{}).value||'',
     adviserName:  (document.getElementById('r-adviser')||{}).value||'Your Name',
-    notes:        (document.getElementById('r-notes')||{}).value||''
+    notes:        (document.getElementById('r-notes')||{}).value||'',
+    linkLabel1:   links.linkLabel1, linkUrl1: links.linkUrl1,
+    linkLabel2:   links.linkLabel2, linkUrl2: links.linkUrl2
   };
   showDraftLoading('Filling template with live rates...');
   google.script.run
-    .withSuccessHandler(function(j){var r=JSON.parse(j);if(r.success)showDraftResult(r.email);else showDraftError(r.error);})
+    .withSuccessHandler(function(j){
+      var r=JSON.parse(j);
+      if(r.success){ _lastEmailHtml = r.emailHtml || ''; showDraftResult(r.email); }
+      else showDraftError(r.error);
+    })
     .withFailureHandler(function(){showDraftError('please try again');})
     .generateRefixEmail(JSON.stringify(cfg));
 }
-function cpEmail(){var out=document.getElementById('eout');if(!out)return;navigator.clipboard.writeText(out.value).then(function(){var b=document.getElementById('cpbtn');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy to clipboard';},2000);});}
+
+// HTML companion to the plain-text body — populated by genRefixEmail. The
+// clipboard write sends BOTH formats so Gmail-on-Chrome picks up the styled
+// links while plain-text clients fall back gracefully.
+var _lastEmailHtml = '';
+
+function cpEmail(){
+  var out=document.getElementById('eout'); if(!out) return;
+  var plain = out.value;
+  var html  = _lastEmailHtml || '';
+  var btn = document.getElementById('cpbtn');
+  function done(){ if(btn){ btn.textContent='Copied!'; setTimeout(function(){btn.textContent='Copy to clipboard';},2000); } }
+  if (html && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    try {
+      var item = new ClipboardItem({
+        'text/plain': new Blob([plain], {type:'text/plain'}),
+        'text/html':  new Blob([html],  {type:'text/html'})
+      });
+      navigator.clipboard.write([item]).then(done, function(){
+        navigator.clipboard.writeText(plain).then(done);
+      });
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  navigator.clipboard.writeText(plain).then(done);
+}
 
 // ============================================================
 // GMAIL SCAN

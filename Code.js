@@ -617,11 +617,48 @@ function generateRefixEmail(configJson) {
       (config.notes ? 'PERSONALISATION (opening line only): ' + config.notes + '\n\n' : '') +
       'TEMPLATE:\n' + config.templateBody;
 
-    return JSON.stringify({success: true, email: callGemini(prompt, null, null)});
+    var generated = callGemini(prompt, null, null) || '';
+
+    var links = [
+      { label: String(config.linkLabel1 || '').trim(), url: String(config.linkUrl1 || '').trim() },
+      { label: String(config.linkLabel2 || '').trim(), url: String(config.linkUrl2 || '').trim() }
+    ].filter(function(l){ return l.label && l.url; });
+
+    var plainFooter = '';
+    if (links.length) {
+      plainFooter = '\n\n' + links.map(function(l){ return l.label + ': ' + l.url; }).join('\n');
+    }
+    var plainEmail = generated + plainFooter;
+    var htmlEmail  = _buildEmailHtml_(generated, links);
+
+    return JSON.stringify({success: true, email: plainEmail, emailHtml: htmlEmail, hasLinks: links.length > 0});
   } catch (e) {
     Logger.log('generateRefixEmail error: ' + e.message);
     return JSON.stringify({success: false, error: e.message});
   }
+}
+
+function _buildEmailHtml_(plainBody, links) {
+  function esc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  var src = String(plainBody || '');
+  var subject = '';
+  var body = src;
+  var m = src.match(/^\s*Subject:\s*([^\n]+)\n+/i);
+  if (m) {
+    subject = m[1].trim();
+    body = src.slice(m[0].length);
+  }
+  var paras = body.split(/\n{2,}/).map(function(p){
+    return '<p style="margin:0 0 12px;line-height:1.55;">' + esc(p).replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+  var subjectHtml = subject ? ('<p style="margin:0 0 16px;line-height:1.55;"><strong>Subject:</strong> ' + esc(subject) + '</p>') : '';
+  var linksHtml = '';
+  if (links && links.length) {
+    linksHtml = '<p style="margin:14px 0 0;line-height:1.55;">' +
+      links.map(function(l){ return '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>'; }).join(' &middot; ') +
+      '</p>';
+  }
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;">' + subjectHtml + paras + linksHtml + '</div>';
 }
 
 // ============================================================
@@ -939,17 +976,29 @@ function _calcPaymentRaw_(principal, annualRate, termYears, freq) {
 // Stored on an EmailTemplates tab in the Rate Desk spreadsheet so
 // templates set as defaults are shared across every adviser. Personal
 // templates stay in the browser's localStorage on the client side.
-// Schema: id | type | name | body | updatedBy | updatedAt
+// Schema (post-migration): id | type | name | body | updatedBy | updatedAt |
+//                          linkLabel1 | linkUrl1 | linkLabel2 | linkUrl2
+// Older sheets (6 columns) are auto-migrated additively on first read so
+// existing rows aren't touched.
+var RATEDESK_TPL_HEADERS = ['id','type','name','body','updatedBy','updatedAt','linkLabel1','linkUrl1','linkLabel2','linkUrl2'];
+
 function _getEmailTemplatesTab_() {
   var ss = _rateDeskSheet_();
   var tab = ss.getSheetByName('EmailTemplates');
   if (!tab) {
     tab = ss.insertSheet('EmailTemplates');
-    tab.getRange(1,1,1,6).setValues([['id','type','name','body','updatedBy','updatedAt']]);
-    tab.getRange(1,1,1,6).setBackground('#1B2A3B').setFontColor('#FFFFFF').setFontWeight('bold');
+    tab.getRange(1, 1, 1, RATEDESK_TPL_HEADERS.length).setValues([RATEDESK_TPL_HEADERS]);
+    tab.getRange(1, 1, 1, RATEDESK_TPL_HEADERS.length).setBackground('#1B2A3B').setFontColor('#FFFFFF').setFontWeight('bold');
     tab.setFrozenRows(1);
     tab.setColumnWidth(1, 240);
     tab.setColumnWidth(4, 480);
+  } else {
+    var existing = tab.getRange(1, 1, 1, Math.max(tab.getLastColumn(), 1)).getValues()[0];
+    var missing = RATEDESK_TPL_HEADERS.filter(function(h){ return existing.indexOf(h) === -1; });
+    if (missing.length) {
+      var startCol = existing.filter(function(h){ return h; }).length + 1;
+      tab.getRange(1, startCol, 1, missing.length).setValues([missing]).setFontWeight('bold').setBackground('#1B2A3B').setFontColor('#FFFFFF');
+    }
   }
   return tab;
 }
@@ -985,14 +1034,25 @@ function getEmailTemplates(type) {
     if (tab.getLastRow() <= 1) _seedDefaultEmailTemplates_(tab);
     var data = tab.getDataRange().getValues();
     if (data.length <= 1) return JSON.stringify({success:true, templates:[]});
+    var headers = data[0];
+    function col(name){ return headers.indexOf(name); }
+    var cId = col('id'), cType = col('type'), cName = col('name'),
+        cBody = col('body'), cUpBy = col('updatedBy'), cUpAt = col('updatedAt'),
+        cL1 = col('linkLabel1'), cU1 = col('linkUrl1'),
+        cL2 = col('linkLabel2'), cU2 = col('linkUrl2');
     var rows = data.slice(1).map(function(r){
+      var upAt = cUpAt >= 0 ? r[cUpAt] : '';
       return {
-        id: String(r[0] || ''),
-        type: String(r[1] || ''),
-        name: String(r[2] || ''),
-        body: String(r[3] || ''),
-        updatedBy: String(r[4] || ''),
-        updatedAt: r[5] instanceof Date ? r[5].toISOString() : String(r[5] || '')
+        id:         cId   >= 0 ? String(r[cId]   || '') : '',
+        type:       cType >= 0 ? String(r[cType] || '') : '',
+        name:       cName >= 0 ? String(r[cName] || '') : '',
+        body:       cBody >= 0 ? String(r[cBody] || '') : '',
+        updatedBy:  cUpBy >= 0 ? String(r[cUpBy] || '') : '',
+        updatedAt:  upAt instanceof Date ? upAt.toISOString() : String(upAt || ''),
+        linkLabel1: cL1 >= 0 ? String(r[cL1] || '') : '',
+        linkUrl1:   cU1 >= 0 ? String(r[cU1] || '') : '',
+        linkLabel2: cL2 >= 0 ? String(r[cL2] || '') : '',
+        linkUrl2:   cU2 >= 0 ? String(r[cU2] || '') : ''
       };
     }).filter(function(t){ return t.id && t.type && (!type || t.type === type); });
     return JSON.stringify({success:true, templates:rows});
@@ -1002,7 +1062,7 @@ function getEmailTemplates(type) {
   }
 }
 
-// Save (insert or update). Payload: {id?, type, name, body}.
+// Save (insert or update). Payload: {id?, type, name, body, linkLabel1, linkUrl1, linkLabel2, linkUrl2}.
 function saveEmailTemplate(payloadJson) {
   try {
     var p = JSON.parse(payloadJson);
@@ -1010,17 +1070,37 @@ function saveEmailTemplate(payloadJson) {
     var caller = ''; try { caller = Session.getActiveUser().getEmail(); } catch(_) {}
     var tab = _getEmailTemplatesTab_();
     var data = tab.getDataRange().getValues();
+    var headers = data[0];
+    function colFor(name){ return headers.indexOf(name); }
+
+    var rowMap = {
+      type:       p.type,
+      name:       p.name,
+      body:       p.body,
+      updatedBy:  caller,
+      updatedAt:  new Date(),
+      linkLabel1: String(p.linkLabel1 || ''),
+      linkUrl1:   String(p.linkUrl1   || ''),
+      linkLabel2: String(p.linkLabel2 || ''),
+      linkUrl2:   String(p.linkUrl2   || '')
+    };
+
     if (p.id) {
+      var idCol = colFor('id');
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === String(p.id)) {
-          tab.getRange(i + 1, 2, 1, 5).setValues([[p.type, p.name, p.body, caller, new Date()]]);
+        if (String(data[i][idCol]) === String(p.id)) {
+          Object.keys(rowMap).forEach(function(k){
+            var c = colFor(k);
+            if (c !== -1) tab.getRange(i + 1, c + 1).setValue(rowMap[k]);
+          });
           return JSON.stringify({success:true, id:p.id});
         }
       }
       return JSON.stringify({success:false, error:'Template not found.'});
     }
     var id = Utilities.getUuid();
-    tab.appendRow([id, p.type, p.name, p.body, caller, new Date()]);
+    rowMap.id = id;
+    tab.appendRow(headers.map(function(h){ return rowMap[h] === undefined ? '' : rowMap[h]; }));
     return JSON.stringify({success:true, id:id});
   } catch(e) {
     return JSON.stringify({success:false, error:e.message});
