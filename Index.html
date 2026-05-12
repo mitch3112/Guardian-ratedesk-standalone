@@ -1539,30 +1539,59 @@ function genRefixEmail(){
     .generateRefixEmail(JSON.stringify(cfg));
 }
 
-// HTML companion to the plain-text body — populated by genRefixEmail. The
-// clipboard write sends BOTH formats so Gmail-on-Chrome picks up the styled
-// links while plain-text clients fall back gracefully.
+// HTML companion to the plain-text body — populated by genRefixEmail.
 var _lastEmailHtml = '';
 
+// Order of preference:
+//   1. contenteditable + execCommand('copy') — works inside Apps Script
+//      iframes and reliably puts rich HTML on the clipboard.
+//   2. ClipboardItem via navigator.clipboard.write — modern API, flakier
+//      inside iframes.
+//   3. navigator.clipboard.writeText — plain-text last resort.
 function cpEmail(){
-  var out=document.getElementById('eout'); if(!out) return;
+  var out = document.getElementById('eout'); if (!out) return;
   var plain = out.value;
   var html  = _lastEmailHtml || '';
   var btn = document.getElementById('cpbtn');
-  function done(){ if(btn){ btn.textContent='Copied!'; setTimeout(function(){btn.textContent='Copy to clipboard';},2000); } }
-  if (html && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
-    try {
-      var item = new ClipboardItem({
-        'text/plain': new Blob([plain], {type:'text/plain'}),
-        'text/html':  new Blob([html],  {type:'text/html'})
-      });
-      navigator.clipboard.write([item]).then(done, function(){
-        navigator.clipboard.writeText(plain).then(done);
-      });
-      return;
-    } catch (e) { /* fall through */ }
+  function done(label){
+    if (btn) { btn.textContent = label || 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy to clipboard'; }, 2000); }
   }
-  navigator.clipboard.writeText(plain).then(done);
+
+  if (html) {
+    var holder = document.createElement('div');
+    holder.contentEditable = 'true';
+    holder.innerHTML = html;
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;white-space:pre-wrap;';
+    document.body.appendChild(holder);
+    var range = document.createRange();
+    range.selectNodeContents(holder);
+    var sel = window.getSelection();
+    var savedRanges = [];
+    for (var i = 0; i < sel.rangeCount; i++) savedRanges.push(sel.getRangeAt(i));
+    sel.removeAllRanges();
+    sel.addRange(range);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    sel.removeAllRanges();
+    savedRanges.forEach(function(r){ sel.addRange(r); });
+    try { document.body.removeChild(holder); } catch (_) {}
+    if (ok) { toast('Copied · rich'); done(); return; }
+
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      try {
+        var item = new ClipboardItem({
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+          'text/html':  new Blob([html],  { type: 'text/html' })
+        });
+        navigator.clipboard.write([item]).then(function(){ toast('Copied · rich'); done(); }, function(){
+          navigator.clipboard.writeText(plain).then(function(){ toast('Copied · plain text only'); done(); });
+        });
+        return;
+      } catch (e) { /* fall through */ }
+    }
+  }
+
+  navigator.clipboard.writeText(plain).then(function(){ toast(html ? 'Copied · plain text only' : 'Copied'); done(); });
 }
 
 // ============================================================
