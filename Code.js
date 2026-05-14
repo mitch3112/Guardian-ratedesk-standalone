@@ -471,6 +471,8 @@ function getRateHistory(bankId, limit) {
 // ============================================================
 // Strip a single (bank, timestamp) snapshot from RateCardHistory.
 // All rows sharing that timestamp+bank pair (one per term) are removed.
+// Also refreshes the bank sheet's PREV_FIXED rows from the cleaned history
+// so movement indicators (▼/▲ deltas) don't keep showing the deleted rates.
 function deleteRateHistorySnapshot(bankId, isoTs) {
   try {
     var ss = _rateDeskSheet_();
@@ -492,11 +494,97 @@ function deleteRateHistorySnapshot(bankId, isoTs) {
     if (!deleted) return JSON.stringify({success:false, error:'Snapshot not found'});
     range.clearContent();
     if (keep.length) sheet.getRange(2,1,keep.length,7).setValues(keep);
+
+    // Rebuild the bank's PREV_FIXED rows from the cleaned history so the
+    // movement indicators reflect the current state of history, not the
+    // snapshot we just removed.
+    try { _refreshPrevFixedFromHistory_(ss, bankId); } catch (e) { Logger.log('PREV_FIXED refresh failed: ' + e.message); }
+
     return JSON.stringify({success:true, deleted:deleted});
   } catch (e) {
     Logger.log('deleteRateHistorySnapshot error: ' + e.message);
     return JSON.stringify({success:false, error:e.message});
   }
+}
+
+// Rebuild the bank sheet's PREV_FIXED rows from RateCardHistory.
+// Rule: PREV_FIXED = most recent snapshot whose values differ from the
+// bank's current FIXED rows. If the most recent snapshot matches current
+// FIXED (current rates came from the last capture), we walk one further
+// back. If no snapshot exists or no snapshot differs, PREV_FIXED is cleared.
+function _refreshPrevFixedFromHistory_(ss, bankId) {
+  var bs = ss.getSheetByName(bankId);
+  if (!bs) return;
+  var histSheet = ss.getSheetByName('RateCardHistory');
+
+  // Read current FIXED rows + non-PREV_FIXED row payload
+  var allData = bs.getDataRange().getValues();
+  var curFixed = {};
+  var keepRows = [];
+  allData.forEach(function(row){
+    var t = String(row[0]).trim().toUpperCase();
+    if (t === 'PREV_FIXED') return;
+    if (t === 'FIXED') {
+      curFixed[String(row[1])] = {
+        adv: parseFloat(row[2]) || 0,
+        disc: parseFloat(row[3]) || 0,
+        highLVR: parseFloat(row[4]) || 0
+      };
+    }
+    keepRows.push(row);
+  });
+
+  // Group history by timestamp for this bank
+  var prevRates = null;
+  if (histSheet && histSheet.getLastRow() >= 2) {
+    var hd = histSheet.getRange(2,1,histSheet.getLastRow()-1,7).getValues();
+    var byTs = {};
+    hd.forEach(function(row){
+      if (String(row[1]) !== String(bankId)) return;
+      var ts = String(row[0]);
+      if (!byTs[ts]) byTs[ts] = [];
+      byTs[ts].push({term:String(row[2]), adv:parseFloat(row[3])||0, disc:parseFloat(row[4])||0, highLVR:parseFloat(row[5])||0});
+    });
+    var tsList = Object.keys(byTs).sort().reverse();
+
+    function snapshotMatchesCurrent(rates) {
+      if (!rates || !rates.length) return false;
+      var anyTerm = false;
+      for (var i = 0; i < rates.length; i++) {
+        var c = curFixed[rates[i].term];
+        if (!c) continue;
+        anyTerm = true;
+        if (Math.abs(c.adv - rates[i].adv) > 0.005) return false;
+        if (Math.abs(c.disc - rates[i].disc) > 0.005) return false;
+      }
+      return anyTerm;
+    }
+
+    for (var i = 0; i < tsList.length; i++) {
+      if (!snapshotMatchesCurrent(byTs[tsList[i]])) {
+        prevRates = byTs[tsList[i]];
+        break;
+      }
+    }
+  }
+
+  bs.clearContents();
+  bs.getRange(1,1,keepRows.length,5).setValues(keepRows);
+  var totalRows = keepRows.length;
+  if (prevRates && prevRates.length) {
+    var prevRows = prevRates.map(function(r){
+      return ['PREV_FIXED', r.term, r.adv, r.disc, r.highLVR];
+    });
+    bs.getRange(keepRows.length+1, 1, prevRows.length, 5).setValues(prevRows);
+    totalRows += prevRows.length;
+  }
+
+  bs.getRange(1,1,1,5).setBackground('#1B2A3B').setFontColor('#FFFFFF').setFontWeight('bold');
+  var dataStart = 7;
+  if (totalRows > dataStart) bs.getRange(dataStart,3,totalRows-dataStart+1,3).setNumberFormat('0.00"%"');
+  bs.autoResizeColumns(1,5);
+  // Mirrored banks (e.g. AIA → ASB) inherit prevFixedRates from the source
+  // at read time in getAllRates, so they don't need their own refresh.
 }
 
 // Rewrite the bank's main sheet from the most-recent remaining snapshot
