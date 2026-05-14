@@ -585,7 +585,7 @@ function openHistoryModal(bankId, term){
     if(!r) return;
     var ts=snap.ts ? new Date(snap.ts) : null;
     var dateStr=ts ? ts.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}) : (snap.lastUpdated||'unknown');
-    rows.push({date:dateStr, lastUpdated:snap.lastUpdated, adv:r.adv, disc:r.disc, highLVR:r.highLVR});
+    rows.push({ts:snap.ts, date:dateStr, lastUpdated:snap.lastUpdated, adv:r.adv, disc:r.disc, highLVR:r.highLVR});
   });
 
   var html='<div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'+
@@ -607,6 +607,7 @@ function openHistoryModal(bankId, term){
         '<th style="padding:8px 6px;font-weight:600;text-align:right;">Advertised</th>'+
         '<th style="padding:8px 6px;font-weight:600;text-align:right;">Discretionary</th>'+
         '<th style="padding:8px 6px;font-weight:600;text-align:right;">Carded &gt;80</th>'+
+        '<th style="padding:8px 6px;font-weight:600;text-align:center;width:36px;"></th>'+
       '</tr></thead><tbody>';
     rows.forEach(function(r,i){
       var prevDisc=i<rows.length-1?rows[i+1].disc:null;
@@ -616,19 +617,95 @@ function openHistoryModal(bankId, term){
         if(dlt>0) deltaHtml=' <span style="color:#EF4444;font-size:10px;">&#9650;'+dlt.toFixed(2)+'</span>';
         else if(dlt<0) deltaHtml=' <span style="color:var(--brand-green-bright);font-size:10px;">&#9660;'+Math.abs(dlt).toFixed(2)+'</span>';
       }
+      var tsEsc=String(r.ts||'').replace(/'/g,"\\'");
+      var termEsc=String(term).replace(/'/g,"\\'");
+      var isLatest=(i===0);
+      var delBtn=r.ts
+        ? '<button onclick="deleteHistorySnapshot(\''+bankId+'\',\''+tsEsc+'\','+(isLatest?'true':'false')+',\''+termEsc+'\')" title="Delete this snapshot'+(isLatest?' and revert live rates':'')+'" style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);width:24px;height:24px;cursor:pointer;font-size:13px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:color 120ms,border-color 120ms;" onmouseover="this.style.color=\'#EF4444\';this.style.borderColor=\'#EF4444\'" onmouseout="this.style.color=\'var(--muted)\';this.style.borderColor=\'var(--border)\'">&times;</button>'
+        : '';
       html+='<tr style="border-bottom:1px solid var(--border);">'+
-        '<td style="padding:9px 6px;color:var(--text);">'+r.date+'</td>'+
+        '<td style="padding:9px 6px;color:var(--text);">'+r.date+(isLatest?' <span style="font-size:10px;color:var(--brand-green-bright);font-weight:600;">LATEST</span>':'')+'</td>'+
         '<td style="padding:9px 6px;color:var(--muted);font-size:12px;">'+(r.lastUpdated||'-')+'</td>'+
         '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);">'+(r.adv>0?r.adv.toFixed(2)+'%':'-')+'</td>'+
         '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);font-weight:600;color:var(--text);">'+(r.disc>0?r.disc.toFixed(2)+'%':'-')+deltaHtml+'</td>'+
         '<td style="padding:9px 6px;text-align:right;font-family:var(--mono);">'+(r.highLVR>0?r.highLVR.toFixed(2)+'%':'-')+'</td>'+
+        '<td style="padding:9px 6px;text-align:center;">'+delBtn+'</td>'+
       '</tr>';
     });
     html+='</tbody></table>';
+    html+='<div style="margin-top:14px;font-size:11px;color:var(--muted);">Tip: deleting the latest snapshot also rolls live rates back to the prior snapshot.</div>';
     html+='</div>';
   }
 
   openRdModal(html);
+}
+
+// Delete a single snapshot from RateCardHistory. If it's the latest one,
+// also revert the bank's live rates to the next-most-recent snapshot.
+function deleteHistorySnapshot(bankId, isoTs, isLatest, term){
+  var msg=isLatest
+    ? 'Delete this snapshot AND roll live rates back to the previous snapshot?\n\nThis will:\n• Remove the snapshot from rate history (sparklines + trends)\n• Reset the live ' + bankId + ' rates to whatever the previous capture showed\n\nThis cannot be undone.'
+    : 'Delete this snapshot from rate history?\n\nIt will disappear from sparklines and the history modal. Live rates are not affected (this is not the latest capture). This cannot be undone.';
+  if(!confirm(msg)) return;
+
+  google.script.run
+    .withSuccessHandler(function(j){
+      try {
+        var r=JSON.parse(j);
+        if(!r.success){ alert('Delete failed: '+(r.error||'unknown')); return; }
+        // If this was the latest, revert live rates too.
+        if(isLatest){
+          google.script.run
+            .withSuccessHandler(function(j2){
+              try {
+                var r2=JSON.parse(j2);
+                if(!r2.success){ alert('Snapshot deleted, but revert failed: '+(r2.error||'unknown')); }
+              } catch(e){}
+              afterHistoryMutation(bankId, term);
+            })
+            .withFailureHandler(function(err){
+              alert('Snapshot deleted, but revert failed: '+(err && err.message ? err.message : 'unknown'));
+              afterHistoryMutation(bankId, term);
+            })
+            .revertBankToLatestSnapshot(bankId);
+        } else {
+          afterHistoryMutation(bankId, term);
+        }
+      } catch(e){ alert('Delete failed: '+e.message); }
+    })
+    .withFailureHandler(function(err){ alert('Delete failed: '+(err && err.message ? err.message : 'unknown')); })
+    .deleteRateHistorySnapshot(bankId, isoTs);
+}
+
+// After a delete/revert, drop cached history + rate data so they reload
+// fresh, re-render the bank card, then reopen the history modal.
+function afterHistoryMutation(bankId, term){
+  if(banks[bankId]){
+    delete banks[bankId]._history;
+    delete banks[bankId]._historyLoading;
+  }
+  // Refetch the full rate data so the bank tab shows the reverted values.
+  google.script.run
+    .withSuccessHandler(function(j){
+      try {
+        var r=JSON.parse(j);
+        if(r && r[bankId]){
+          // Merge so we keep UI-only fields (fullName, color, etc.)
+          Object.keys(r[bankId]).forEach(function(k){ banks[bankId][k]=r[bankId][k]; });
+        }
+      } catch(e){}
+      renderBank(bankId);
+      try { renderOverview(); } catch(e){}
+      loadRateHistoryIfNeeded(bankId);
+      // Re-open the modal so the user sees the updated history list.
+      setTimeout(function(){ openHistoryModal(bankId, term); }, 250);
+    })
+    .withFailureHandler(function(){
+      renderBank(bankId);
+      try { renderOverview(); } catch(e){}
+      setTimeout(function(){ openHistoryModal(bankId, term); }, 250);
+    })
+    .getAllRates();
 }
 
 // Jump from a bank tab straight to the refix email drafter, pre-selecting

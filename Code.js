@@ -467,6 +467,134 @@ function getRateHistory(bankId, limit) {
 }
 
 // ============================================================
+// HISTORY DELETE + REVERT (clean-up after bad scrapes)
+// ============================================================
+// Strip a single (bank, timestamp) snapshot from RateCardHistory.
+// All rows sharing that timestamp+bank pair (one per term) are removed.
+function deleteRateHistorySnapshot(bankId, isoTs) {
+  try {
+    var ss = _rateDeskSheet_();
+    var sheet = ss.getSheetByName('RateCardHistory');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return JSON.stringify({success:false, error:'No history sheet'});
+    }
+    var range = sheet.getRange(2,1,sheet.getLastRow()-1,7);
+    var data = range.getValues();
+    var keep = [];
+    var deleted = 0;
+    data.forEach(function(row){
+      if (String(row[1]) === String(bankId) && String(row[0]) === String(isoTs)) {
+        deleted++;
+      } else {
+        keep.push(row);
+      }
+    });
+    if (!deleted) return JSON.stringify({success:false, error:'Snapshot not found'});
+    range.clearContent();
+    if (keep.length) sheet.getRange(2,1,keep.length,7).setValues(keep);
+    return JSON.stringify({success:true, deleted:deleted});
+  } catch (e) {
+    Logger.log('deleteRateHistorySnapshot error: ' + e.message);
+    return JSON.stringify({success:false, error:e.message});
+  }
+}
+
+// Rewrite the bank's main sheet from the most-recent remaining snapshot
+// in RateCardHistory. Used after deleting a bad latest snapshot — so the
+// live rates roll back instead of staying poisoned.
+// LEM bands, cashback, notes, and floating rates are preserved from the
+// current bank sheet (history only tracks fixed rates).
+// PREV_FIXED is rebuilt from the second-most-recent snapshot so movement
+// indicators reflect the pre-revert state, not the bad snapshot.
+// Does NOT append a new history row — that would defeat the point.
+function revertBankToLatestSnapshot(bankId) {
+  try {
+    if (MIRRORED_BANKS[bankId]) {
+      return JSON.stringify({success:false, error: bankId + ' rates mirror ' + MIRRORED_BANKS[bankId] + '. Revert ' + MIRRORED_BANKS[bankId] + ' instead.'});
+    }
+    var ss = _rateDeskSheet_();
+    var histSheet = ss.getSheetByName('RateCardHistory');
+    if (!histSheet || histSheet.getLastRow() < 2) {
+      return JSON.stringify({success:false, error:'No history available to revert from'});
+    }
+    var histData = histSheet.getRange(2,1,histSheet.getLastRow()-1,7).getValues();
+    var byTs = {};
+    histData.forEach(function(row){
+      if (String(row[1]) !== String(bankId)) return;
+      var ts = String(row[0]);
+      if (!byTs[ts]) byTs[ts] = { ts: ts, lastUpdated: String(row[6]||''), rates: [] };
+      byTs[ts].rates.push({term:String(row[2]), adv:parseFloat(row[3])||0, disc:parseFloat(row[4])||0, highLVR:parseFloat(row[5])||0});
+    });
+    var tsList = Object.keys(byTs).sort().reverse();
+    if (!tsList.length) {
+      return JSON.stringify({success:false, error:'No history snapshots for ' + bankId});
+    }
+    var latest = byTs[tsList[0]];
+
+    // Preserve everything the history sheet doesn't track.
+    var bs = ss.getSheetByName(bankId);
+    var preservedNotes = '', preservedCashback = '';
+    var preservedLem = null;
+    var preservedFloats = [];
+    if (bs) {
+      var bd = bs.getDataRange().getValues();
+      bd.forEach(function(row){
+        var t = String(row[0]).trim().toUpperCase();
+        if (t === 'NOTES') preservedNotes = String(row[1]||'');
+        else if (t === 'CASHBACK') preservedCashback = String(row[1]||'');
+        else if (t === 'FLOAT') preservedFloats.push({name:String(row[1]), adv:parseFloat(row[2])||0, disc:parseFloat(row[3])||0, highLVR:parseFloat(row[4])||0});
+        else if (t === 'LEM_80_85' || t === 'LEM_85_90' || t === 'LEM_90_95') {
+          if (!preservedLem) preservedLem = {};
+          var key = t === 'LEM_80_85' ? 'b80_85' : (t === 'LEM_85_90' ? 'b85_90' : 'b90_95');
+          preservedLem[key] = parseFloat(row[1]) || 0;
+        }
+      });
+    }
+
+    var def = DEFAULT_RATES[bankId] || {};
+    var lem = preservedLem || def.lemBands || DEFAULT_LEM;
+    var floats = preservedFloats.length ? preservedFloats : (def.floatingRates || []);
+    var cashback = preservedCashback || def.cashback || '';
+    var notes = preservedNotes || def.notes || '';
+
+    var prevFixedRows = [];
+    if (tsList.length > 1) {
+      byTs[tsList[1]].rates.forEach(function(r){
+        prevFixedRows.push(['PREV_FIXED', r.term, r.adv, r.disc, r.highLVR]);
+      });
+    }
+
+    if (!bs) bs = ss.insertSheet(bankId);
+    else bs.clearContents();
+
+    var rows = [
+      ['type','name_or_term','advertised_%','disc_lte80_%','adv_gt80_%'],
+      ['PENDING',      'false','','',''],
+      ['LAST_UPDATED', latest.lastUpdated || '','','',''],
+      ['LEM_80_85',    lem.b80_85 !== undefined ? lem.b80_85 : 0,'','',''],
+      ['LEM_85_90',    lem.b85_90 !== undefined ? lem.b85_90 : 0.25,'','',''],
+      ['LEM_90_95',    lem.b90_95 !== undefined ? lem.b90_95 : 0.50,'','','']
+    ];
+    latest.rates.forEach(function(r){ rows.push(['FIXED', r.term, r.adv, r.disc, r.highLVR]); });
+    floats.forEach(function(r){ rows.push(['FLOAT', r.name, r.adv, r.disc, r.highLVR]); });
+    if (cashback) rows.push(['CASHBACK', cashback,'','','']);
+    if (notes) rows.push(['NOTES', notes,'','','']);
+    prevFixedRows.forEach(function(r){ rows.push(r); });
+
+    bs.getRange(1,1,rows.length,5).setValues(rows);
+    bs.getRange(1,1,1,5).setBackground('#1B2A3B').setFontColor('#FFFFFF').setFontWeight('bold');
+    var dataStart = 7;
+    if (rows.length > dataStart) bs.getRange(dataStart,3,rows.length-dataStart+1,3).setNumberFormat('0.00"%"');
+    bs.autoResizeColumns(1,5);
+
+    return JSON.stringify({success:true, revertedTo: latest.lastUpdated, ts: latest.ts});
+  } catch (e) {
+    Logger.log('revertBankToLatestSnapshot error: ' + e.message);
+    return JSON.stringify({success:false, error:e.message});
+  }
+}
+
+// ============================================================
 // TERM NORMALISER
 // ============================================================
 function normalizeTerm(term) {
@@ -503,20 +631,40 @@ function extractRatesFromFile(base64Data, mimeType, bankHint) {
   try {
     const prompt = buildExtractPrompt(bankHint);
     var responseText;
+    // Vision/PDF extraction routes through the higher-accuracy model.
+    // Flash mis-OCRs digits in rate-card tables (e.g. 4.45 → 7.29).
     if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
-      responseText = callGemini(prompt, base64Data, mimeType);
+      responseText = callGemini(prompt, base64Data, mimeType, { highAccuracy: true });
     } else {
       const text = Utilities.newBlob(Utilities.base64Decode(base64Data)).getDataAsString().substring(0,8000);
-      responseText = callGemini(prompt + '\n\nContent:\n' + text, null, null);
+      responseText = callGemini(prompt + '\n\nContent:\n' + text, null, null, { highAccuracy: true });
     }
     const cleaned = responseText.replace(/```json|```/g,'').trim();
-    // Gemini sometimes returns prose ('I am sorry...') when an email
-    // isn't actually a rate card. Detect non-JSON before parsing so the
-    // caller gets a clean failure instead of an Unexpected-token crash.
     if (!cleaned || (cleaned[0] !== '{' && cleaned[0] !== '[')) {
       return JSON.stringify({success:false, error:'Not a rate card · ' + cleaned.substring(0,80)});
     }
-    return JSON.stringify({success:true, data:JSON.parse(cleaned)});
+    var data = JSON.parse(cleaned);
+
+    // Sanity guard. Hallucinated/OCR-mangled extractions almost always
+    // surface as out-of-band rates — NZ fixed home-loan rates sit in
+    // 2.0–6.5% for the foreseeable future. Anything outside that range
+    // is either a floating/test/penalty rate that slipped into fixedRates,
+    // or a misread digit. Reject the whole payload so it doesn't poison
+    // the sheet or the trend history.
+    var bad = (data.fixedRates || []).filter(function(r){
+      var vals = [r.adv, r.disc, r.highLVR].map(parseFloat).filter(function(v){ return !isNaN(v) && v > 0; });
+      return vals.some(function(v){ return v < 2.0 || v > 6.5; });
+    });
+    if (bad.length) {
+      Logger.log('extractRatesFromFile rejected (out-of-range): ' + JSON.stringify(data));
+      return JSON.stringify({
+        success:false,
+        error:'Extraction rejected — rates out of plausible range (2.0–6.5%). Likely a floating/test rate or OCR miss. Bad rows: ' +
+          bad.map(function(r){return r.term+' adv='+r.adv+' disc='+r.disc;}).join('; ')
+      });
+    }
+
+    return JSON.stringify({success:true, data:data});
   } catch (e) {
     Logger.log('extractRatesFromFile error: ' + e.message);
     return JSON.stringify({success:false, error:e.message});
@@ -528,17 +676,22 @@ function buildExtractPrompt(bankHint) {
     'Format:\n{"bankName":"BNZ/ASB/Westpac/ANZ/Kiwibank/CoOp/SBS/TSB","lastUpdated":"date e.g. 7 April 2026",\n' +
     '"fixedRates":[{"term":"STANDARD TERM","adv":4.49,"disc":4.45,"highLVR":4.49},...],\n' +
     '"floatingRates":[{"name":"product","adv":5.75,"disc":5.65,"highLVR":5.75}]}\n\n' +
-    'Standard terms only: "6 month","1 year","18 month","2 year","3 year","4 year","5 year"\n' +
-    'Convert: 12 mths->1 year, 24 mths->2 year, 36 mths->3 year, 48 mths->4 year, 60 mths->5 year. Skip non-standard rows.\n\n' +
+    'CRITICAL RULES:\n' +
+    '1. fixedRates is ONLY for time-bound fixed-term home loan rates: "6 month","1 year","18 month","2 year","3 year","4 year","5 year".\n' +
+    '2. NEVER include any of these in fixedRates — put them in floatingRates instead: floating, variable, Standard Variable, Housing Variable, Orbit, Orbit Variable, TotalMoney, Rapid Repay, Revolving Credit, Choices Everyday, Offset, Line of Credit.\n' +
+    '3. NEVER include servicing test rates, test rates, stress test rates, penalty rates, default rates, business loan rates, overdraft rates, or personal loan rates anywhere.\n' +
+    '4. NZ home-loan fixed rates currently sit between 4.0% and 6.0%. If a value you are about to write is outside 2.0–6.5%, you are reading the wrong row — re-check the table.\n' +
+    '5. Transcribe each digit EXACTLY as printed. Do NOT round, estimate, infer, or add any margin. If a digit is unclear, omit that row rather than guess.\n' +
+    '6. Convert term aliases: 12 mths→1 year, 24 mths→2 year, 36 mths→3 year, 48 mths→4 year, 60 mths→5 year. Skip non-standard terms.\n\n' +
     'Column mappings:\n' +
-    '- BNZ: adv=Card, disc=0-80% LVR, highLVR=>80% LVR\n' +
-    '- ASB: adv=Advertised Rate, disc=LVR<=80%, highLVR=LVR>80%\n' +
+    '- BNZ: adv=Card, disc=0-80% LVR, highLVR=>80% LVR (table header says "80.01% - 100%")\n' +
+    '- ASB: adv=Advertised Rate, disc=LVR<=80%, highLVR=LVR>80% (LEM applies)\n' +
     '- Westpac: adv=Adv Rate <80%, disc=Disc Rate <80%, highLVR=Adv Rate >80%\n' +
     '- Kiwibank: adv=Carded (<=80%), disc=Matrix (<=80%), highLVR=Carded (>80%). NO 18-month term.\n' +
     '- SBS: adv=Carded Special, disc=Exclusive Adviser (<80%), highLVR=Standard >80%\n' +
     '- ANZ: adv=Advertised, disc=Disc <=80%, highLVR=Adv >80%\n' +
     '- Other: adv=advertised, disc=discretionary <=80%, highLVR=advertised >80%\n\n' +
-    'Date format: "7 April 2026". Rates numeric. If column missing, copy adv.\n' +
+    'Date format: "7 April 2026". Rates numeric (no % sign). If a column is genuinely missing for that row, copy adv into it.\n' +
     'Bank hint: ' + (bankHint||'detect from document') + '.';
 }
 
@@ -1195,16 +1348,24 @@ function updateNegotiatedRateStatus(id, status) {
 // ============================================================
 // GEMINI API
 // ============================================================
-function callGemini(textPrompt, base64Data, mimeType) {
+function callGemini(textPrompt, base64Data, mimeType, opts) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GOOGLE_API_KEY');
   if (!apiKey) throw new Error('GOOGLE_API_KEY not set. Get one free at aistudio.google.com');
   const parts = [];
   if (base64Data && mimeType) parts.push({inlineData:{mimeType:mimeType, data:base64Data}});
   parts.push({text: textPrompt});
+
+  // highAccuracy is for rate-card OCR — pro model + dynamic thinking.
+  // Flash with thinking disabled mis-reads digits in low-res table images.
+  // Everything else (email drafting) stays on flash for speed/cost.
+  var highAccuracy = opts && opts.highAccuracy;
+  var model = highAccuracy ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+  var thinkingConfig = highAccuracy ? { thinkingBudget: -1 } : { thinkingBudget: 0 };
+
   const res = UrlFetchApp.fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+apiKey,
+    'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey,
     { method:'post', headers:{'Content-Type':'application/json'},
-      payload:JSON.stringify({contents:[{parts:parts}],generationConfig:{temperature:0.1,maxOutputTokens:8192,thinkingConfig:{thinkingBudget:0}}}),
+      payload:JSON.stringify({contents:[{parts:parts}],generationConfig:{temperature:0.1,maxOutputTokens:8192,thinkingConfig:thinkingConfig}}),
       muteHttpExceptions:true }
   );
   const result = JSON.parse(res.getContentText());
