@@ -306,14 +306,40 @@ function updateBankRates(bankId, rateDataJson) {
     // Snapshot current FIXED rows as PREV_FIXED before overwriting.
     // This gives the frontend the data it needs for rate movement indicators.
     let prevFixedRows = [];
+    let existingFixed = [];
     if (sheet) {
       const existingData = sheet.getDataRange().getValues();
       existingData.forEach(function(row) {
         const t = String(row[0]).trim().toUpperCase();
         if (t === 'FIXED') {
           prevFixedRows.push(['PREV_FIXED', row[1], row[2], row[3], row[4]]);
+          existingFixed.push({
+            term: normalizeTerm(String(row[1])),
+            adv: parseFloat(row[2]) || 0,
+            disc: parseFloat(row[3]) || 0,
+            highLVR: parseFloat(row[4]) || 0
+          });
         }
       });
+    }
+
+    // No-change dedup. Prevents duplicate history rows when the same rate
+    // card is scanned more than once (cron + manual "Scan now" race,
+    // multiple triggers, or back-to-back weekly cards with identical rates).
+    // Compare term/adv/disc/highLVR with small tolerance for float rounding.
+    if (existingFixed.length && d.fixedRates && d.fixedRates.length === existingFixed.length) {
+      var byTerm = {};
+      existingFixed.forEach(function(r){ byTerm[r.term] = r; });
+      var unchanged = d.fixedRates.every(function(r){
+        var e = byTerm[normalizeTerm(r.term)];
+        return e
+          && Math.abs((parseFloat(r.adv)||0)     - e.adv)     < 0.005
+          && Math.abs((parseFloat(r.disc)||0)    - e.disc)    < 0.005
+          && Math.abs((parseFloat(r.highLVR)||0) - e.highLVR) < 0.005;
+      });
+      if (unchanged) {
+        return JSON.stringify({success:true, skipped:true, reason:'no_change', updated:d.lastUpdated});
+      }
     }
 
     if (!sheet) sheet = ss.insertSheet(bankId);
@@ -997,7 +1023,8 @@ function scanGmailForRates() {
           floatingRates: (extracted.floatingRates&&extracted.floatingRates.length)?extracted.floatingRates:(def.floatingRates||[]),
           cashback: def.cashback||'', notes: def.notes||''
         };
-        if (JSON.parse(updateBankRates(bankId,JSON.stringify(rd))).success) updated.push({bankId:bankId, date:rd.lastUpdated});
+        var writeRes = JSON.parse(updateBankRates(bankId,JSON.stringify(rd)));
+        if (writeRes.success && !writeRes.skipped) updated.push({bankId:bankId, date:rd.lastUpdated});
       }
     } catch(e){ Logger.log('Scan error '+bankId+': '+e.message); }
   });
@@ -1025,6 +1052,61 @@ function setupDailyTrigger() {
   });
   ScriptApp.newTrigger('scanGmailForRates').timeBased().everyDays(1).atHour(8).create();
   return 'Daily Gmail scan set for 8am.';
+}
+
+// Diagnostic — run from the Apps Script editor if you suspect multiple
+// scan triggers exist. Logs every project trigger with its handler.
+function listScheduledTriggers() {
+  var lines = ScriptApp.getProjectTriggers().map(function(t){
+    return t.getHandlerFunction() + ' · ' + t.getTriggerSource() + ' · id=' + t.getUniqueId();
+  });
+  var msg = lines.length
+    ? lines.length + ' trigger(s):\n' + lines.join('\n')
+    : 'No triggers configured.';
+  Logger.log(msg);
+  return msg;
+}
+
+// One-off cleanup — strips exact-duplicate rows from RateCardHistory.
+// "Exact" = same bank + same term + same adv/disc/highLVR (within 0.005)
+// captured within a 60-minute window. Keeps the earliest of each cluster.
+// Safe to run repeatedly; subsequent runs find nothing to remove.
+function cleanupDuplicateRateHistory() {
+  try {
+    var ss = _rateDeskSheet_();
+    var sheet = ss.getSheetByName('RateCardHistory');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return JSON.stringify({success:true, removed:0, reason:'empty'});
+    }
+    var range = sheet.getRange(2,1,sheet.getLastRow()-1,7);
+    var data = range.getValues();
+    var keep = [];
+    var removed = 0;
+    var seen = {}; // key: bank|term|adv|disc|highLVR → earliest ts (ms)
+    var WINDOW_MS = 60 * 60 * 1000;
+    data.forEach(function(row){
+      var bank = String(row[1]);
+      var term = String(row[2]);
+      var adv = parseFloat(row[3]) || 0;
+      var disc = parseFloat(row[4]) || 0;
+      var hl = parseFloat(row[5]) || 0;
+      var key = bank + '|' + term + '|' + adv.toFixed(3) + '|' + disc.toFixed(3) + '|' + hl.toFixed(3);
+      var tsMs = 0;
+      try { tsMs = new Date(String(row[0])).getTime(); } catch (e) { tsMs = 0; }
+      if (seen[key] != null && Math.abs(tsMs - seen[key]) < WINDOW_MS) {
+        removed++;
+        return;
+      }
+      seen[key] = tsMs;
+      keep.push(row);
+    });
+    range.clearContent();
+    if (keep.length) sheet.getRange(2,1,keep.length,7).setValues(keep);
+    return JSON.stringify({success:true, removed:removed, kept:keep.length});
+  } catch (e) {
+    Logger.log('cleanupDuplicateRateHistory error: ' + e.message);
+    return JSON.stringify({success:false, error:e.message});
+  }
 }
 
 // ============================================================
